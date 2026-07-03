@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-QTnfLwEv.js";import{I as t,d as n}from"./runtime-core.esm-bundler-DOZneoXq.js";import{t as r}from"./OptionsEditor-D-gTZT0E.js";var i=e({default:()=>a}),a={__name:`SelectConfig`,props:{model:{type:Object,required:!0}},setup(e){return(i,a)=>(t(),n(r,{model:e.model},null,8,[`model`]))}};export{a as n,i as t};

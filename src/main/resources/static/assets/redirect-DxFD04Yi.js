@@ -1,0 +1,1 @@
+import{I as e,N as t,p as n}from"./runtime-core.esm-bundler-DOZneoXq.js";import{_ as r,g as i}from"./index-CQL_wnGK.js";var a={__name:`index`,setup(a){let o=i(),s=r();return t(()=>{let{params:e,query:t}=o,n=`/`+(Array.isArray(e.path)?e.path.join(`/`):e.path);s.replace({path:n,query:t})}),(t,r)=>(e(),n(`div`))}};export{a as default};

@@ -1,0 +1,52 @@
+server:
+  port: 30086
+spring:
+  application:
+    name: kunlun-iot
+  servlet:
+    multipart: #设置上传文件大小
+      max-file-size: 20MB  #单个文件的大小
+      max-request-size: 20MB  #单次请求的文件的总大小
+      enabled: true
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/assess_admin?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      read-only: false
+      connection-timeout: 60000
+      idle-timeout: 10000
+      validation-timeout: 3000
+      max-lifetime: 60000
+      login-timeout: 5
+      maximum-pool-size: 60
+      minimum-idle: 10
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+  jackson:
+    # 统一时区为东八区，避免Date序列化偏8小时
+    time-zone: GMT+8
+    date-format: yyyy-MM-dd HH:mm:ss
+# 邮件配置已迁移至 sys_config（mail.* 键），由前端"邮件配置"页面维护，无需在此配置。
+# token配置
+token:
+  # 令牌自定义标识
+  header: Authorization
+  # 令牌有效期（分钟）
+  expireTime: 420
+# 微信小程序配置（填写真实 appid/secret 后即启用线上 code2Session；留空则进入开发模式）
+wx:
+  appid:
+  secret:
+logging:
+  level:
+    root: INFO
+    com.rutong: DEBUG
+    org.hibernate.SQL: DEBUG

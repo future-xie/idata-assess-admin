@@ -1,0 +1,1 @@
+import{B as e,I as t,d as n}from"./runtime-core.esm-bundler-DOZneoXq.js";import{v as r}from"./index-CQL_wnGK.js";var i={};function a(r,i){let a=e(`router-view`);return t(),n(a)}var o=r(i,[[`render`,a]]);export{o as default};
