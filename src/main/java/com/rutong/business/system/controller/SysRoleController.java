@@ -5,13 +5,13 @@ import com.rutong.framework.bean.PageBean;
 import com.rutong.framework.bean.TableDataInfo;
 import com.rutong.framework.bean.enums.BusinessType;
 import com.rutong.framework.annotation.OperLog;
-import com.rutong.framework.dao.objectquery.SortFilter;
+import com.rutong.framework.mybatis.objectquery.SortFilter;
 import com.rutong.framework.security.LoginUser;
 import com.rutong.framework.security.SecurityUtils;
 import com.rutong.framework.security.service.PermissionService;
 import com.rutong.framework.security.service.TokenService;
 import com.rutong.framework.utils.StringUtils;
-import com.rutong.business.common.service.BaseService;
+import com.rutong.framework.service.MpBaseService;
 import com.rutong.business.system.entity.SysRole;
 import com.rutong.business.system.entity.SysUser;
 import com.rutong.business.system.query.SysRoleQuery;
@@ -128,7 +128,7 @@ public class SysRoleController {
         return AjaxResult.success();
     }
 
-    public BaseService getService() {
+    public MpBaseService<SysRole> getService() {
         return roleService;
     }
 }

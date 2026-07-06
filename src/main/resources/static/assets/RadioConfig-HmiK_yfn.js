@@ -1,0 +1,1 @@
+import{C as e,G as t,j as n}from"./index-CIK0Eu_v.js";import{t as r}from"./OptionsEditor-HIOaunFw.js";var i=t({default:()=>a}),a={__name:`RadioConfig`,props:{model:{type:Object,required:!0}},setup(t){return(i,a)=>(n(),e(r,{model:t.model},null,8,[`model`]))}};export{a as n,i as t};

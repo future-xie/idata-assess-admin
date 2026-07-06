@@ -1,11 +1,12 @@
 package com.rutong.framework.security.service;
 
 import com.rutong.business.system.entity.SysDept;
+import com.rutong.business.system.entity.SysUser;
+import com.rutong.business.system.service.SysDeptService;
+import com.rutong.business.system.service.SysUserService;
 import com.rutong.framework.exception.ServiceException;
 import com.rutong.framework.security.LoginUser;
 import com.rutong.framework.utils.StringUtils;
-import com.rutong.business.system.entity.SysUser;
-import com.rutong.business.system.service.SysUserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +31,9 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     @Autowired
     private PermissionService permissionService;
 
+    @Autowired
+    private SysDeptService deptService;
+
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         SysUser user = userService.findByUserName(username);
@@ -51,9 +55,13 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         loginUser.setUsername(user.getUserName());
         loginUser.setPassword(user.getPassword());
 
-        SysDept dept = user.getDept();
-        loginUser.setDeptId(dept.getId());
-        loginUser.setDeptName(dept.getDeptName());
+        loginUser.setDeptId(user.getDeptId());
+        if (user.getDeptId() != null) {
+            SysDept dept = deptService.findById(user.getDeptId());
+            if (dept != null) {
+                loginUser.setDeptName(dept.getDeptName());
+            }
+        }
         loginUser.setPermissions(permissionService.getMenuPermission(loginUser));
         return loginUser;
     }

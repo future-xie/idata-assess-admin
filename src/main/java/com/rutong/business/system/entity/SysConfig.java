@@ -1,15 +1,11 @@
 package com.rutong.business.system.entity;
 
 import com.rutong.business.common.entity.BaseEntity;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
 @Getter
 @Setter
-@Entity
-@Table(name = "sys_config")
 public class SysConfig extends BaseEntity {
 
     /** 参数名称 */

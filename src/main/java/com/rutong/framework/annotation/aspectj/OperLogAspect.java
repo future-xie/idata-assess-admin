@@ -18,6 +18,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.apache.commons.lang3.ArrayUtils;
 import org.aspectj.lang.JoinPoint;
+import org.aspectj.lang.annotation.After;
 import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.AfterThrowing;
 import org.aspectj.lang.annotation.Aspect;
@@ -80,6 +81,15 @@ public class OperLogAspect {
         handleLog(joinPoint, controllerLog, e, null);
     }
 
+    /**
+     * 兜底清理 ThreadLocal：防止极端情况下 @AfterReturning/@AfterThrowing 未触发，
+     * 导致线程池复用时残留旧时间戳、costTime 计算错误。
+     */
+    @After(value = "@annotation(controllerLog)")
+    public void doAfter(JoinPoint joinPoint, OperLog controllerLog) {
+        TIME_THREADLOCAL.remove();
+    }
+
     protected void handleLog(final JoinPoint joinPoint, OperLog controllerLog, final Exception e, Object jsonResult) {
         try {
             // 获取当前的用户
@@ -114,9 +124,8 @@ public class OperLogAspect {
             // 保存数据库
             AsyncManager.me().execute(AsyncFactory.recordOper(operLog));
         } catch (Exception exp) {
-            // 记录本地异常日志
-            log.error("异常信息:{}", exp.getMessage());
-            exp.printStackTrace();
+            // 记录本地异常日志（含完整堆栈，避免 printStackTrace 绕过日志框架）
+            log.error("操作日志记录异常", exp);
         } finally {
             TIME_THREADLOCAL.remove();
         }
@@ -200,16 +209,11 @@ public class OperLogAspect {
         if (clazz.isArray()) {
             return clazz.getComponentType().isAssignableFrom(MultipartFile.class);
         } else if (Collection.class.isAssignableFrom(clazz)) {
-            Collection collection = (Collection) o;
-            for (Object value : collection) {
-                return value instanceof MultipartFile;
-            }
+            Collection<?> collection = (Collection<?>) o;
+            return collection.stream().anyMatch(value -> value instanceof MultipartFile);
         } else if (Map.class.isAssignableFrom(clazz)) {
-            Map map = (Map) o;
-            for (Object value : map.entrySet()) {
-                Map.Entry entry = (Map.Entry) value;
-                return entry.getValue() instanceof MultipartFile;
-            }
+            Map<?, ?> map = (Map<?, ?>) o;
+            return map.values().stream().anyMatch(value -> value instanceof MultipartFile);
         }
         return o instanceof MultipartFile || o instanceof HttpServletRequest || o instanceof HttpServletResponse
                 || o instanceof BindingResult;

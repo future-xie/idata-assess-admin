@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rutong.business.system.mapper.SysDeptMapper">
+
+    <!-- 多个角色勾选的部门 ID（一次性 IN 查询，避免按角色逐个 N+1） -->
+    <select id="selectDeptIdsByRoleIds" resultType="java.lang.Long">
+        SELECT DISTINCT d.id
+        FROM sys_dept d
+        LEFT JOIN sys_role_dept rd ON d.id = rd.dept_id
+        WHERE rd.role_id IN
+        <foreach collection="roleIds" item="rid" open="(" separator="," close=")">#{rid}</foreach>
+    </select>
+
+</mapper>

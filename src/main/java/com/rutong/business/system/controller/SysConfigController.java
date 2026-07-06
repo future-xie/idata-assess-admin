@@ -5,9 +5,9 @@ import com.rutong.framework.bean.PageBean;
 import com.rutong.framework.bean.TableDataInfo;
 import com.rutong.framework.bean.enums.BusinessType;
 import com.rutong.framework.annotation.OperLog;
-import com.rutong.framework.dao.objectquery.SortFilter;
-import com.rutong.business.common.service.BaseService;
+import com.rutong.framework.mybatis.objectquery.SortFilter;
 import com.rutong.business.system.entity.SysConfig;
+import com.rutong.framework.service.MpBaseService;
 import com.rutong.business.system.query.SysConfigQuery;
 import com.rutong.business.system.service.SysConfigService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -84,7 +84,7 @@ public class SysConfigController {
         return AjaxResult.success();
     }
 
-    public BaseService getService() {
+    public MpBaseService<SysConfig> getService() {
         return configService;
     }
 }

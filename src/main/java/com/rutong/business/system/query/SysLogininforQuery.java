@@ -1,6 +1,6 @@
 package com.rutong.business.system.query;
 
-import com.rutong.framework.dao.objectquery.Query;
+import com.rutong.framework.mybatis.objectquery.Query;
 import lombok.Data;
 
 import java.util.Date;

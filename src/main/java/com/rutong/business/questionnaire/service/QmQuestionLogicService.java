@@ -1,7 +1,9 @@
 package com.rutong.business.questionnaire.service;
 
-import com.rutong.business.common.service.BaseService;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.rutong.business.questionnaire.constant.QuestionConstants;
 import com.rutong.business.questionnaire.entity.QmQuestionLogic;
+import com.rutong.framework.service.MpBaseService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,10 +15,10 @@ import java.util.List;
  * 题目逻辑关系 业务层
  */
 @Service
-public class QmQuestionLogicService extends BaseService<QmQuestionLogic> {
+public class QmQuestionLogicService extends MpBaseService<QmQuestionLogic> {
 
     public List<QmQuestionLogic> listByQuestion(Long questionId) {
-        return dao.findByProperty(QmQuestionLogic.class, "questionId", questionId);
+        return lambdaQuery().eq(QmQuestionLogic::getQuestionId, questionId).list();
     }
 
     /** 按多个题目 ID 批量查询逻辑（避免 N+1） */
@@ -24,15 +26,15 @@ public class QmQuestionLogicService extends BaseService<QmQuestionLogic> {
         if (questionIds == null || questionIds.isEmpty()) {
             return Collections.emptyList();
         }
-        return dao.executeHqlInQuery(QmQuestionLogic.class,
-                "from QmQuestionLogic l where l.questionId in (:ids) order by l.id",
-                "ids", questionIds);
+        return lambdaQuery().in(QmQuestionLogic::getQuestionId, questionIds)
+                .orderByAsc(QmQuestionLogic::getId).list();
     }
 
     /** 替换某题目的全部逻辑规则（先删后插） */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void replaceLogic(Long questionId, List<QmQuestionLogic> logic) {
-        dao.deleteByProperty(QmQuestionLogic.class, "questionId", questionId);
+        remove(new LambdaQueryWrapper<QmQuestionLogic>()
+                .eq(QmQuestionLogic::getQuestionId, questionId));
         if (logic == null || logic.isEmpty()) {
             return;
         }
@@ -44,20 +46,21 @@ public class QmQuestionLogicService extends BaseService<QmQuestionLogic> {
             l.setId(null);
             l.setQuestionId(questionId);
             if (l.getOp() == null) {
-                l.setOp("EQ");
+                l.setOp(QuestionConstants.OP_EQ);
             }
             if (l.getAction() == null) {
-                l.setAction("SHOW");
+                l.setAction(QuestionConstants.ACTION_SHOW);
             }
             toSave.add(l);
         }
         if (!toSave.isEmpty()) {
-            dao.bulkSave(toSave);
+            saveBatch(toSave);
         }
     }
 
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int deleteByQuestion(Long questionId) {
-        return dao.deleteByProperty(QmQuestionLogic.class, "questionId", questionId);
+        return baseMapper.delete(new LambdaQueryWrapper<QmQuestionLogic>()
+                .eq(QmQuestionLogic::getQuestionId, questionId));
     }
 }

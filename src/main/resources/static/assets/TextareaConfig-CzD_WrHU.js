@@ -1,0 +1,1 @@
+import{T as e,j as t,s as n}from"./index-CIK0Eu_v.js";var r={};function i(n,r){return t(),e(`div`)}var a=n(r,[[`render`,i]]);export{a as default};

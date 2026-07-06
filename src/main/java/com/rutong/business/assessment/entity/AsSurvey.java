@@ -1,10 +1,9 @@
 package com.rutong.business.assessment.entity;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.rutong.business.common.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -15,8 +14,7 @@ import java.util.Date;
  */
 @Getter
 @Setter
-@Entity
-@Table(name = "as_survey")
+@TableName("as_survey")
 public class AsSurvey extends BaseEntity {
 
     /** 模板 ID */
@@ -35,7 +33,6 @@ public class AsSurvey extends BaseEntity {
     private String status;
 
     /** 评估人（用户 ID，逗号分隔） */
-    @Column(length = 255)
     private String assessorIds;
 
     /** 截止日期 */
@@ -43,7 +40,6 @@ public class AsSurvey extends BaseEntity {
     private Date dueDate;
 
     /** 章节范围（章节 ID，逗号分隔；空表示全部章节） */
-    @Column(length = 255)
     private String chapterScope;
 
     /** 分发时间 */
@@ -59,4 +55,8 @@ public class AsSurvey extends BaseEntity {
 
     /** 受访人用户 ID（登录填写身份判定） */
     private Long respondentUserId;
+
+    /** 审核人姓名（逗号分隔；仅列表展示用，不持久化） */
+    @TableField(exist = false)
+    private String assessorNames;
 }

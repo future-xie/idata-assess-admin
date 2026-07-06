@@ -196,6 +196,11 @@ public class TokenService {
      */
     private String getToken(HttpServletRequest request) {
         String token = request.getHeader(header);
+        if (StringUtils.isEmpty(token)) {
+            // 兼容文件下载/预览等 <a href> 场景（浏览器导航无法携带 Authorization header）：
+            // 从 query 参数 token 取（前端 downloadUrl 拼接）
+            token = request.getParameter("token");
+        }
         if (StringUtils.isNotEmpty(token) && token.startsWith(Constants.TOKEN_PREFIX)) {
             token = token.replace(Constants.TOKEN_PREFIX, "");
         }

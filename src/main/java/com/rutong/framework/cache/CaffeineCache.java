@@ -532,14 +532,23 @@ public class CaffeineCache {
      * 获取指定缓存的所有键
      *
      * @param cacheName 缓存名称
-     * @param pattern   匹配模式（暂时只支持前缀匹配）
+     * @param pattern   匹配模式（前缀匹配，如 "sys_config:*"）；传 null 或 "*" 表示全部
      * @return 键集合
      */
     public Collection<String> keys(final String cacheName, final String pattern) {
-        // 注意：Caffeine 没有提供获取所有key的API
-        // 在实际应用中，如果需要这个功能，需要自己维护key的集合
-        log.warn("Caffeine不支持直接获取所有key，这里返回空集合");
-        return Collections.emptyList();
+        Cache<String, Object> cache = cacheMap.get(cacheName);
+        if (cache == null) {
+            return Collections.emptyList();
+        }
+        Set<String> allKeys = cache.asMap().keySet();
+        if (pattern == null || "*".equals(pattern)) {
+            return allKeys;
+        }
+        // 只支持前缀匹配：去掉末尾的通配符后用 startsWith
+        String prefix = pattern.endsWith("*") ? pattern.substring(0, pattern.length() - 1) : pattern;
+        return allKeys.stream()
+                .filter(k -> k.startsWith(prefix))
+                .collect(Collectors.toList());
     }
 
     /**

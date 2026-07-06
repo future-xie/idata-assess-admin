@@ -1,33 +1,37 @@
 package com.rutong.business.system.service;
 
+import com.rutong.business.system.entity.SysDept;
+import com.rutong.business.system.entity.SysRole;
+import com.rutong.business.system.mapper.SysRoleMapper;
+import com.rutong.business.system.mapper.SysUserMapper;
 import com.rutong.framework.constant.UserConstants;
 import com.rutong.framework.exception.ServiceException;
+import com.rutong.framework.service.MpBaseService;
 import com.rutong.framework.utils.StringUtils;
-import com.rutong.business.common.service.BaseService;
-import com.rutong.business.system.entity.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * 角色 业务层处理
  */
 @Service
-public class SysRoleService extends BaseService<SysRole> {
+public class SysRoleService extends MpBaseService<SysRole> {
+
+    @Autowired
+    private SysUserMapper userMapper;
+    @Autowired
+    private SysRoleMapper roleMapper;
 
     /**
-     * 根据用户ID查询权限
-     *
-     * @param userId 用户ID
-     * @return 权限列表
+     * 根据用户ID查询角色权限（替代原 dao.findById(SysUser).getRoles()）
      */
     public Set<String> selectRolePermissionByUserId(Long userId) {
-        SysUser sysUser = dao.findById(SysUser.class,userId);
-        Set<SysRole> perms = sysUser.getRoles();
+        List<SysRole> roles = userMapper.selectRolesByUserId(userId);
         Set<String> permsSet = new HashSet<>();
-        for (SysRole perm : perms) {
+        for (SysRole perm : roles) {
             if (StringUtils.isNotNull(perm)) {
                 permsSet.addAll(Arrays.asList(perm.getRoleKey().trim().split(",")));
             }
@@ -35,39 +39,22 @@ public class SysRoleService extends BaseService<SysRole> {
         return permsSet;
     }
 
-    /**
-     * 查询所有角色
-     *
-     * @return 角色列表
-     */
     public List<SysRole> selectRoleAll() {
-        return dao.findAll(SysRole.class);
+        return list();
     }
 
-    /**
-     * 校验角色名称是否唯一
-     *
-     * @param role 角色信息
-     * @return 结果
-     */
     public boolean checkRoleNameUnique(SysRole role) {
         Long roleId = StringUtils.isNull(role.getId()) ? -1L : role.getId();
-        SysRole info = dao.findByPropertyFirst(SysRole.class, "roleName", role.getRoleName());
+        SysRole info = lambdaQuery().eq(SysRole::getRoleName, role.getRoleName()).one();
         if (StringUtils.isNotNull(info) && info.getId().longValue() != roleId.longValue()) {
             return UserConstants.NOT_UNIQUE;
         }
         return UserConstants.UNIQUE;
     }
 
-    /**
-     * 校验角色权限是否唯一
-     *
-     * @param role 角色信息
-     * @return 结果
-     */
     public boolean checkRoleKeyUnique(SysRole role) {
         Long roleId = StringUtils.isNull(role.getId()) ? -1L : role.getId();
-        SysRole info = dao.findByPropertyFirst(SysRole.class, "roleKey", role.getRoleKey());
+        SysRole info = lambdaQuery().eq(SysRole::getRoleKey, role.getRoleKey()).one();
         if (StringUtils.isNotNull(info) && info.getId().longValue() != roleId.longValue()) {
             return UserConstants.NOT_UNIQUE;
         }
@@ -75,82 +62,56 @@ public class SysRoleService extends BaseService<SysRole> {
     }
 
     /**
-     * 新增保存角色信息
-     *
-     * @param role 角色信息（含 depts 关联）
-     * @return 结果
+     * 新增角色 + 维护角色-部门中间表（前端传入 role.depts 含 id）
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int insertRole(SysRole role) {
-        // 处理部门关联：将前端传入的 { id } 对象替换为托管的实体
-        Set<SysDept> depts = role.getDepts();
-        if (depts != null && !depts.isEmpty()) {
-            Set<SysDept> managedDepts = new HashSet<>();
-            for (SysDept dept : depts) {
-                SysDept managed = dao.findById(SysDept.class, dept.getId());
-                if (managed != null) {
-                    managedDepts.add(managed);
-                }
-            }
-            role.setDepts(managedDepts);
-        }
-        return super.insert(role);
+        int row = super.insert(role);
+        replaceRoleDept(role);
+        return row;
     }
 
     /**
-     * 修改保存角色信息
-     *
-     * @param role 角色信息（含 depts 关联）
-     * @return 结果
+     * 修改角色 + 重建角色-部门中间表（菜单关联由 authMenu 单独维护，此处不动）
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int updateRole(SysRole role) {
-        // 从数据库加载已有角色，保留 menus 关联（前端不会传 menus）
-        SysRole existing = findById(role.getId());
-        if (existing != null) {
-            role.setMenus(existing.getMenus());
+        int row = super.update(role);
+        replaceRoleDept(role);
+        return row;
+    }
+
+    private void replaceRoleDept(SysRole role) {
+        if (role.getId() == null) {
+            return;
         }
-        // 处理部门关联：将前端传入的 { id } 对象替换为托管的实体
+        roleMapper.deleteRoleDept(role.getId());
         Set<SysDept> depts = role.getDepts();
         if (depts != null) {
-            Set<SysDept> managedDepts = new HashSet<>();
-            for (SysDept dept : depts) {
-                SysDept managed = dao.findById(SysDept.class, dept.getId());
-                if (managed != null) {
-                    managedDepts.add(managed);
+            for (SysDept d : depts) {
+                if (d != null && d.getId() != null) {
+                    roleMapper.insertRoleDept(role.getId(), d.getId());
                 }
             }
-            role.setDepts(managedDepts);
         }
-        return super.update(role);
     }
 
     /**
-     * 授权角色菜单
-     *
-     * @param roleId  角色ID
-     * @param menuIds 菜单ID数组
+     * 授权角色菜单（先清空 sys_role_menu，再批量插入）
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void authMenu(Long roleId, List<Long> menuIds) {
         SysRole role = findById(roleId);
         if (role == null) {
             throw new ServiceException("角色不存在");
         }
-        // 清空原有菜单关联
-        role.setMenus(new HashSet<>());
-        // 设置新的菜单关联
-        if (menuIds != null && !menuIds.isEmpty()) {
-            Set<SysMenu> menus = new HashSet<>();
+        roleMapper.deleteRoleMenu(roleId);
+        if (menuIds != null) {
             for (Long menuId : menuIds) {
-                SysMenu menu = dao.findById(SysMenu.class, menuId);
-                if (menu != null) {
-                    menus.add(menu);
+                if (menuId != null) {
+                    roleMapper.insertRoleMenu(roleId, menuId);
                 }
             }
-            role.setMenus(menus);
         }
-        dao.update(role);
     }
-
 }

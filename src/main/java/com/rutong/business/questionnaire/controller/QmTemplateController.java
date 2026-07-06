@@ -1,7 +1,6 @@
 package com.rutong.business.questionnaire.controller;
 
 import com.rutong.business.questionnaire.entity.QmTemplate;
-import com.rutong.business.questionnaire.entity.QmTemplateLibrary;
 import com.rutong.business.questionnaire.query.QmTemplateQuery;
 import com.rutong.business.questionnaire.service.QmTemplateService;
 import com.rutong.framework.bean.AjaxResult;
@@ -33,7 +32,7 @@ public class QmTemplateController {
     @GetMapping("/list")
     public TableDataInfo list(QmTemplateQuery query, PageBean page) {
         return templateService.findAllByPage(page, query,
-                List.of(new com.rutong.framework.dao.objectquery.SortFilter("id", com.rutong.framework.dao.objectquery.SortFilter.DESC)));
+                List.of(new com.rutong.framework.mybatis.objectquery.SortFilter("id", com.rutong.framework.mybatis.objectquery.SortFilter.DESC)));
     }
 
     /**

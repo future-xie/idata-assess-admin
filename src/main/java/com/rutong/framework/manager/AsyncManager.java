@@ -16,9 +16,10 @@ public class AsyncManager {
     private final int OPERATE_DELAY_TIME = 10;
 
     /**
-     * 异步操作任务调度线程池
+     * 异步操作任务调度线程池。
+     * 懒加载：不在饿汉实例化期 getBean，避免容器尚未就绪导致 NoSuchBeanDefinitionException。
      */
-    private ScheduledExecutorService executor = SpringUtils.getBean("scheduledExecutorService");
+    private volatile ScheduledExecutorService executor;
 
     /**
      * 单例模式
@@ -32,13 +33,24 @@ public class AsyncManager {
         return me;
     }
 
+    private ScheduledExecutorService getExecutor() {
+        if (executor == null) {
+            synchronized (AsyncManager.class) {
+                if (executor == null) {
+                    executor = SpringUtils.getBean("scheduledExecutorService");
+                }
+            }
+        }
+        return executor;
+    }
+
     /**
      * 执行任务
      *
      * @param task 任务
      */
     public void execute(TimerTask task) {
-        executor.schedule(task, OPERATE_DELAY_TIME, TimeUnit.MILLISECONDS);
+        getExecutor().schedule(task, OPERATE_DELAY_TIME, TimeUnit.MILLISECONDS);
     }
 
     /**

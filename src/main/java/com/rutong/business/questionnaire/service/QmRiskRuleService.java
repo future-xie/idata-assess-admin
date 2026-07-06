@@ -1,10 +1,11 @@
 package com.rutong.business.questionnaire.service;
 
-import com.rutong.business.common.service.BaseService;
 import com.rutong.business.questionnaire.entity.QmRiskLib;
 import com.rutong.business.questionnaire.entity.QmRiskRule;
 import com.rutong.business.questionnaire.entity.QmRiskRuleCond;
+import com.rutong.business.questionnaire.mapper.QmRiskLibMapper;
 import com.rutong.business.questionnaire.pojo.RiskRuleVo;
+import com.rutong.framework.service.MpBaseService;
 import com.rutong.framework.utils.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -12,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,16 +22,19 @@ import java.util.stream.Collectors;
  * 风险规则 业务层（规则 + 多条件，级联管理）
  */
 @Service
-public class QmRiskRuleService extends BaseService<QmRiskRule> {
+public class QmRiskRuleService extends MpBaseService<QmRiskRule> {
 
     @Autowired
     private QmRiskRuleCondService condService;
+
+    @Autowired
+    private QmRiskLibMapper riskLibMapper;
 
     /**
      * 按模板查询规则（含条件 + 风险库名/描述/等级），供前端配置与评估使用。
      */
     public List<RiskRuleVo> listVoByTemplate(Long templateId) {
-        List<QmRiskRule> rules = dao.findByProperty(QmRiskRule.class, "templateId", templateId);
+        List<QmRiskRule> rules = lambdaQuery().eq(QmRiskRule::getTemplateId, templateId).list();
         if (rules.isEmpty()) {
             return new ArrayList<>();
         }
@@ -42,8 +45,7 @@ public class QmRiskRuleService extends BaseService<QmRiskRule> {
         List<Long> libIds = rules.stream().map(QmRiskRule::getRiskLibId)
                 .filter(java.util.Objects::nonNull).distinct().collect(Collectors.toList());
         Map<Long, QmRiskLib> libMap = libIds.isEmpty() ? new HashMap<>()
-                : dao.executeHqlInQuery(QmRiskLib.class,
-                        "from QmRiskLib r where r.id in (:ids)", "ids", libIds).stream()
+                : riskLibMapper.selectBatchIds(libIds).stream()
                 .collect(Collectors.toMap(QmRiskLib::getId, r -> r));
 
         List<RiskRuleVo> result = new ArrayList<>();
@@ -54,7 +56,7 @@ public class QmRiskRuleService extends BaseService<QmRiskRule> {
         return result;
     }
 
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public RiskRuleVo saveRule(RiskRuleVo vo) {
         QmRiskRule rule = toEntity(vo);
         rule.setId(null);
@@ -63,7 +65,7 @@ public class QmRiskRuleService extends BaseService<QmRiskRule> {
         return null;
     }
 
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public RiskRuleVo updateRule(RiskRuleVo vo) {
         QmRiskRule rule = toEntity(vo);
         update(rule);
@@ -72,7 +74,7 @@ public class QmRiskRuleService extends BaseService<QmRiskRule> {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int deleteById(Serializable id) {
         condService.deleteByRule((Long) id);
         return super.deleteById(id);

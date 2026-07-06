@@ -46,7 +46,7 @@ public class AsSurveyController {
     @GetMapping("/list")
     public TableDataInfo list(AsSurveyQuery query, PageBean page) {
         return surveyService.listForCurrentUser(page, query,
-                List.of(new com.rutong.framework.dao.objectquery.SortFilter("id", com.rutong.framework.dao.objectquery.SortFilter.DESC)));
+                List.of(new com.rutong.framework.mybatis.objectquery.SortFilter("id", com.rutong.framework.mybatis.objectquery.SortFilter.DESC)));
     }
 
     /**
@@ -244,12 +244,13 @@ public class AsSurveyController {
         if (sid == null || qid == null) {
             return AjaxResult.error("surveyId / questionId 不能为空");
         }
-        if (!com.rutong.business.assessment.constant.AssessConstants.ROLE_REVIEWER
-                .equals(surveyService.currentRole(Long.parseLong(sid.toString())))) {
+        if (!surveyService.isReviewer(Long.parseLong(sid.toString()))) {
             return AjaxResult.error("仅审核人可标记风险");
         }
         String level = body.get("level") == null ? null : body.get("level").toString();
         String riskDesc = body.get("riskDesc") == null ? null : body.get("riskDesc").toString();
+        String riskName = body.get("riskName") == null ? null : body.get("riskName").toString();
+        String treatmentPlan = body.get("treatmentPlan") == null ? null : body.get("treatmentPlan").toString();
         if (level == null || level.trim().isEmpty()) {
             return AjaxResult.error("请选择风险等级");
         }
@@ -260,6 +261,8 @@ public class AsSurveyController {
                 Long.parseLong(sid.toString()),
                 Long.parseLong(qid.toString()),
                 level.toUpperCase(),
-                riskDesc.trim()));
+                riskDesc.trim(),
+                riskName == null ? null : riskName.trim(),
+                treatmentPlan == null ? null : treatmentPlan.trim()));
     }
 }

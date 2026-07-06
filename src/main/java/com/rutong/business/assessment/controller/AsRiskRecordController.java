@@ -3,8 +3,6 @@ package com.rutong.business.assessment.controller;
 import com.rutong.business.assessment.constant.AssessConstants;
 import com.rutong.business.assessment.entity.AsRiskProcess;
 import com.rutong.business.assessment.service.AsRiskProcessService;
-import com.rutong.framework.security.SecurityUtils;
-import java.util.Date;
 import java.util.HashMap;
 import com.rutong.business.assessment.entity.AsRiskRecord;
 import com.rutong.business.assessment.entity.AsSurvey;
@@ -18,7 +16,7 @@ import com.rutong.framework.bean.PageBean;
 import com.rutong.framework.bean.TableDataInfo;
 import com.rutong.framework.bean.enums.BusinessType;
 import com.rutong.framework.annotation.OperLog;
-import com.rutong.framework.dao.objectquery.SortFilter;
+import com.rutong.framework.mybatis.objectquery.SortFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +25,10 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 风险记录 控制器（风险管理 → 风险记录）。
@@ -59,6 +61,18 @@ public class AsRiskRecordController {
                 List.of(new SortFilter("id", SortFilter.DESC)));
         List<?> rows = rsp.getRows();
         if (rows != null && !rows.isEmpty()) {
+            // 批量预加载本页所有关联 survey / question，避免逐行 N+1 查询
+            Set<Long> surveyIds = rows.stream().map(o -> ((AsRiskRecord) o).getSurveyId())
+                    .filter(Objects::nonNull).collect(Collectors.toSet());
+            Set<Long> questionIds = rows.stream().map(o -> ((AsRiskRecord) o).getQuestionId())
+                    .filter(Objects::nonNull).collect(Collectors.toSet());
+            Map<Long, AsSurvey> surveyMap = surveyIds.isEmpty() ? Map.of()
+                    : surveyService.listByIds(surveyIds).stream()
+                        .collect(Collectors.toMap(AsSurvey::getId, Function.identity()));
+            Map<Long, QmQuestion> questionMap = questionIds.isEmpty() ? Map.of()
+                    : questionService.listByIds(questionIds).stream()
+                        .collect(Collectors.toMap(QmQuestion::getId, Function.identity()));
+
             List<Map<String, Object>> enriched = new ArrayList<>(rows.size());
             for (Object o : rows) {
                 AsRiskRecord r = (AsRiskRecord) o;
@@ -71,8 +85,15 @@ public class AsRiskRecordController {
                 m.put("handleStatus", r.getHandleStatus());
                 m.put("processStatus", r.getProcessStatus());
                 m.put("createTime", r.getCreateTime());
-                fillSurvey(m, r.getSurveyId());
-                fillQuestion(m, r.getQuestionId());
+                AsSurvey s = surveyMap.get(r.getSurveyId());
+                if (s != null) {
+                    m.put("surveyTitle", s.getTitle());
+                    m.put("respondentName", s.getRespondentName());
+                }
+                QmQuestion q = questionMap.get(r.getQuestionId());
+                if (q != null) {
+                    m.put("questionTitle", q.getTitle());
+                }
                 enriched.add(m);
             }
             rsp.setRows(enriched);
@@ -107,6 +128,11 @@ public class AsRiskRecordController {
         if (existing == null) {
             return AjaxResult.error("风险记录不存在");
         }
+        // 整改已完成的记录不可修改（仅可查看）
+        if (AssessConstants.PROCESS_STATUS_RECTIFIED.equals(existing.getProcessStatus())
+                || AssessConstants.PROCESS_STATUS_UNRECTIFIED.equals(existing.getProcessStatus())) {
+            return AjaxResult.error("整改已完成的记录不可修改");
+        }
         // 仅允许变更 level/riskDesc，其余字段（surveyId/questionId/handleStatus/processStatus 等）保持原值
         existing.setLevel(data.getLevel());
         existing.setRiskDesc(data.getRiskDesc());
@@ -135,7 +161,9 @@ public class AsRiskRecordController {
         AsRiskRecord r = riskRecordService.findById(id);
         if (r == null) return AjaxResult.error("风险记录不存在");
         Map<String, Object> data = new HashMap<>();
-        data.put("currentRole", surveyService.currentRole(r.getSurveyId()));
+        // 角色独立判定（一人可同时为填写人和审核人）
+        data.put("isRespondent", surveyService.isRespondent(r.getSurveyId()));
+        data.put("isReviewer", surveyService.isReviewer(r.getSurveyId()));
         data.put("riskRecord", r);
         data.put("processes", processService.listByRiskRecord(id));
         return AjaxResult.success(data);
@@ -148,22 +176,7 @@ public class AsRiskRecordController {
     @OperLog(title = "风险处理", businessType = BusinessType.INSERT)
     @PostMapping("/process")
     public AjaxResult submitProcess(@RequestBody AsRiskProcess body) {
-        if (body.getRiskRecordId() == null) return AjaxResult.error("riskRecordId 不能为空");
-        AsRiskRecord r = riskRecordService.findById(body.getRiskRecordId());
-        if (r == null) return AjaxResult.error("风险记录不存在");
-        if (!AssessConstants.ROLE_RESPONDENT.equals(surveyService.currentRole(r.getSurveyId()))) {
-            return AjaxResult.error("仅处理人(受访人)可提交处理记录");
-        }
-        if (AssessConstants.PROCESS_STATUS_RECTIFIED.equals(r.getProcessStatus())
-                || AssessConstants.PROCESS_STATUS_UNRECTIFIED.equals(r.getProcessStatus())) {
-            return AjaxResult.error("该风险已结束处理");
-        }
-        processService.insert(body);
-        if (r.getProcessStatus() == null || AssessConstants.PROCESS_STATUS_UNPROCESSED.equals(r.getProcessStatus())) {
-            r.setProcessStatus(AssessConstants.PROCESS_STATUS_PROCESSING);
-            riskRecordService.update(r);
-        }
-        return AjaxResult.success(body);
+        return AjaxResult.success(riskRecordService.submitProcess(body));
     }
 
     /**
@@ -173,18 +186,8 @@ public class AsRiskRecordController {
     @OperLog(title = "风险反馈", businessType = BusinessType.UPDATE)
     @PostMapping("/process/review/{processId}")
     public AjaxResult reviewProcess(@PathVariable Long processId, @RequestBody Map<String, String> body) {
-        AsRiskProcess p = processService.findById(processId);
-        if (p == null) return AjaxResult.error("处理记录不存在");
-        AsRiskRecord r = riskRecordService.findById(p.getRiskRecordId());
-        if (r == null) return AjaxResult.error("风险记录不存在");
-        if (!AssessConstants.ROLE_REVIEWER.equals(surveyService.currentRole(r.getSurveyId()))) {
-            return AjaxResult.error("仅审核人可反馈");
-        }
         String review = body == null ? null : body.get("reviewContent");
-        p.setReviewContent(review == null ? "" : review.trim());
-        p.setReviewBy(SecurityUtils.getUsername());
-        p.setReviewTime(new Date());
-        processService.update(p);
+        riskRecordService.reviewProcess(processId, review);
         return AjaxResult.success();
     }
 
@@ -195,23 +198,9 @@ public class AsRiskRecordController {
     @OperLog(title = "完成风险处理", businessType = BusinessType.UPDATE)
     @PostMapping("/finishProcessing/{id}")
     public AjaxResult finishProcessing(@PathVariable Long id, @RequestBody Map<String, String> body) {
-        AsRiskRecord r = riskRecordService.findById(id);
-        if (r == null) return AjaxResult.error("风险记录不存在");
-        if (!AssessConstants.ROLE_REVIEWER.equals(surveyService.currentRole(r.getSurveyId()))) {
-            return AjaxResult.error("仅审核人可完成处理");
-        }
         String result = body == null ? null : body.get("result");
-        if ("PASS".equalsIgnoreCase(result)) {
-            r.setProcessStatus(AssessConstants.PROCESS_STATUS_RECTIFIED);
-        } else if ("FAIL".equalsIgnoreCase(result)) {
-            r.setProcessStatus(AssessConstants.PROCESS_STATUS_UNRECTIFIED);
-        } else {
-            return AjaxResult.error("result 应为 PASS 或 FAIL");
-        }
-        if (body != null && body.get("comment") != null && !body.get("comment").trim().isEmpty()) {
-            r.setRemark(body.get("comment").trim());
-        }
-        riskRecordService.update(r);
+        String comment = body == null ? null : body.get("comment");
+        riskRecordService.finishProcessing(id, result, comment);
         return AjaxResult.success();
     }
 

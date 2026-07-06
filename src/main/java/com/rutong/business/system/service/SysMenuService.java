@@ -1,17 +1,18 @@
 package com.rutong.business.system.service;
 
-import com.rutong.business.system.entity.SysUser;
+import com.rutong.business.system.entity.SysMenu;
+import com.rutong.business.system.mapper.SysMenuMapper;
 import com.rutong.framework.bean.TreeSelect;
 import com.rutong.framework.constant.Constants;
 import com.rutong.framework.constant.UserConstants;
 import com.rutong.framework.security.SecurityUtils;
+import com.rutong.framework.service.MpBaseService;
 import com.rutong.framework.utils.StringUtils;
-import com.rutong.business.common.service.BaseService;
-import com.rutong.business.system.entity.SysMenu;
-import com.rutong.business.system.entity.SysRole;
 import com.rutong.business.system.pojo.MetaVo;
 import com.rutong.business.system.pojo.RouterVo;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -20,40 +21,22 @@ import java.util.stream.Collectors;
  * 菜单 业务层处理
  */
 @Service
-public class SysMenuService extends BaseService<SysMenu> {
+public class SysMenuService extends MpBaseService<SysMenu> {
 
-    /**
-     * 根据用户ID查询权限
-     *
-     * @param userId 用户ID
-     * @return 权限列表
-     */
+    @Autowired
+    private SysMenuMapper menuMapper;
+
     public Set<String> selectMenuPermsByUserId(Long userId) {
-        String sql = "select distinct m.perms from sys_menu m " +
-                " left join sys_role_menu rm on m.id = rm.menu_id " +
-                " left join sys_user_role ur on rm.role_id = ur.role_id " +
-                " where ur.user_id = " + userId;
-        List<String> perms = dao.executeSQLQuery(String.class, sql);
-        Set<String> permsSet = new HashSet<>();
-        for (String perm : perms) {
-            if (StringUtils.isNotEmpty(perm)) {
-                permsSet.addAll(Arrays.asList(perm.trim().split(",")));
-            }
-        }
-        return permsSet;
+        List<String> perms = menuMapper.selectMenuPermsByUserId(userId);
+        return toPermSet(perms);
     }
 
-    /**
-     * 根据角色ID查询权限
-     *
-     * @param roleId 角色ID
-     * @return 权限列表
-     */
     public Set<String> selectMenuPermsByRoleId(Long roleId) {
-        String sql = "select distinct m.perms from sys_menu m " +
-                " left join sys_role_menu rm on m.id = rm.menu_id " +
-                "  where rm.role_id = " + roleId;
-        List<String> perms = dao.executeSQLQuery(String.class, sql);
+        List<String> perms = menuMapper.selectMenuPermsByRoleId(roleId);
+        return toPermSet(perms);
+    }
+
+    private Set<String> toPermSet(List<String> perms) {
         Set<String> permsSet = new HashSet<>();
         for (String perm : perms) {
             if (StringUtils.isNotEmpty(perm)) {
@@ -64,33 +47,28 @@ public class SysMenuService extends BaseService<SysMenu> {
     }
 
     /**
-     * 根据用户ID查询菜单
-     *
-     * @param userId 用户名称
-     * @return 菜单列表（树形结构，仅包含用户有权限的菜单）
+     * 根据用户ID查询菜单树（管理员全部，普通用户仅授权菜单）
      */
     public List<SysMenu> selectMenuByUserId(Long userId) {
         List<SysMenu> menus;
         if (SecurityUtils.isAdmin(userId)) {
-            // 管理员：查询所有菜单（排除按钮类型F）
-            String hql = "FROM SysMenu m WHERE m.menuType <> 'F' ORDER BY m.parentId, m.orderNum";
-            menus = dao.executeHqlQuery(SysMenu.class, hql);
+            menus = menuMapper.selectAllMenusNotButton();
         } else {
-            // 普通用户：只查询角色关联的菜单（排除按钮类型F）
-            // 查出扁平列表，再手动构建树，避免 JPA @OneToMany 加载未授权的子菜单
-            String hql = "select distinct m from SysUser u join u.roles r join r.menus m " +
-                    "where u.id = " + userId + " AND m.menuType <> 'F' ORDER BY m.parentId, m.orderNum";
-            menus = dao.executeHqlQuery(SysMenu.class, hql);
+            menus = menuMapper.selectMenusByUserId(userId);
         }
         return buildMenuTree(menus);
     }
 
     /**
-     * 从扁平菜单列表构建菜单树
-     * 只包含列表中的菜单，避免 JPA @OneToMany 懒加载未授权的子菜单
-     *
-     * @param menus 扁平菜单列表
-     * @return 树形菜单列表（仅根节点）
+     * 全部菜单树（含按钮 F 级操作权限），用于角色菜单授权——角色需能勾选按钮权限。
+     * 不能复用 selectMenuByUserId（其管理员分支排除了按钮）。
+     */
+    public List<SysMenu> selectAllMenuTree() {
+        return buildMenuTree(menuMapper.selectAllMenus());
+    }
+
+    /**
+     * 从扁平菜单列表构建菜单树（手动填充 children，避免 JPA 懒加载未授权子菜单）
      */
     private List<SysMenu> buildMenuTree(List<SysMenu> menus) {
         Map<Long, SysMenu> menuMap = new LinkedHashMap<>();
@@ -98,15 +76,12 @@ public class SysMenuService extends BaseService<SysMenu> {
             menu.getChildren().clear();
             menuMap.put(menu.getId(), menu);
         }
-
         List<SysMenu> roots = new ArrayList<>();
         for (SysMenu menu : menus) {
             Long parentId = menu.getParentId();
             if (parentId == null || !menuMap.containsKey(parentId)) {
-                // 根菜单：无父级 或 父级不在授权列表中（作为根节点展示）
                 roots.add(menu);
             } else {
-                // 子菜单：加入父菜单的 children 集合
                 menuMap.get(parentId).getChildren().add(menu);
             }
         }
@@ -114,27 +89,17 @@ public class SysMenuService extends BaseService<SysMenu> {
     }
 
     /**
-     * 根据角色ID查询菜单树信息
-     *
-     * @param roleId 角色ID
-     * @return 选中菜单列表
+     * 根据角色ID查询勾选的菜单 ID 列表
      */
     public List<Long> selectMenuListByRoleId(Long roleId) {
-        SysRole role = dao.findById(SysRole.class, roleId);
-        String sql = "select m.id from sys_menu m left join sys_role_menu rm on m.id = rm.menu_id " +
-                " where rm.role_id = " + roleId;
-        sql += " order by m.parent_id, m.order_num ";
-        return dao.executeSQLQuery(Long.class, sql);
+        return menuMapper.selectMenuIdsByRoleId(roleId);
     }
 
     /**
-     * 构建前端路由所需要的菜单
-     *
-     * @param menus 菜单列表
-     * @return 路由列表
+     * 构建前端路由
      */
     public List<RouterVo> buildMenus(List<SysMenu> menus) {
-        List<RouterVo> routers = new LinkedList<RouterVo>();
+        List<RouterVo> routers = new LinkedList<>();
         for (SysMenu menu : menus) {
             RouterVo router = new RouterVo();
             router.setHidden("0".equals(menu.getVisible()));
@@ -150,7 +115,7 @@ public class SysMenuService extends BaseService<SysMenu> {
                 router.setChildren(buildMenus(new ArrayList<>(cMenus)));
             } else if (isMenuFrame(menu)) {
                 router.setMeta(null);
-                List<RouterVo> childrenList = new ArrayList<RouterVo>();
+                List<RouterVo> childrenList = new ArrayList<>();
                 RouterVo children = new RouterVo();
                 children.setPath(menu.getPath());
                 children.setComponent(menu.getComponent());
@@ -159,10 +124,10 @@ public class SysMenuService extends BaseService<SysMenu> {
                 children.setQuery(menu.getQuery());
                 childrenList.add(children);
                 router.setChildren(childrenList);
-            } else if (menu.getParentId() == null && isInnerLink(menu)) {
+            } else if (isTopLevel(menu) && isInnerLink(menu)) {
                 router.setMeta(new MetaVo(menu.getMenuName(), menu.getIcon()));
                 router.setPath("/");
-                List<RouterVo> childrenList = new ArrayList<RouterVo>();
+                List<RouterVo> childrenList = new ArrayList<>();
                 RouterVo children = new RouterVo();
                 String routerPath = innerLinkReplaceEach(menu.getPath());
                 children.setPath(routerPath);
@@ -177,94 +142,80 @@ public class SysMenuService extends BaseService<SysMenu> {
         return routers;
     }
 
-    /**
-     * 是否存在菜单子节点
-     *
-     * @param menuId 菜单ID
-     * @return 结果
-     */
-    public boolean hasChildByMenuId(Long menuId) {
-        long result = dao.countByProperty(SysMenu.class, "parentId", menuId);
-        return result > 0;
+    /** 顶级菜单：parent_id 为空或 0（顶级统一存 0，兼容历史 NULL） */
+    private boolean isTopLevel(SysMenu menu) {
+        Long pid = menu.getParentId();
+        return pid == null || pid == 0L;
     }
 
-    /**
-     * 校验菜单名称是否唯一
-     *
-     * @param menu 菜单信息
-     * @return 结果
-     */
+    /** 新增菜单：顶级 parent_id 统一为 0（外键已移除，0 不再受限） */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int insert(SysMenu menu) {
+        if (menu.getParentId() == null) {
+            menu.setParentId(0L);
+        }
+        return super.insert(menu);
+    }
+
+    /** 修改菜单：顶级 parent_id 统一为 0 */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int update(SysMenu menu) {
+        if (menu.getParentId() == null) {
+            menu.setParentId(0L);
+        }
+        return super.update(menu);
+    }
+
+    public boolean hasChildByMenuId(Long menuId) {
+        return lambdaQuery().eq(SysMenu::getParentId, menuId).count() > 0;
+    }
+
     public boolean checkMenuNameUnique(SysMenu menu) {
         Long menuId = StringUtils.isNull(menu.getId()) ? -1L : menu.getId();
-        Long pId = menu.getParentId() == null ? 0L : menu.getParentId();
-        SysMenu info = dao.findByPropertyFirst(SysMenu.class, "menuName", menu.getMenuName(), "parentId", pId);
+        Long pId = menu.getParentId() != null ? menu.getParentId() : 0L;
+        SysMenu info = lambdaQuery()
+                .eq(SysMenu::getMenuName, menu.getMenuName())
+                .eq(SysMenu::getParentId, pId)
+                .one();
         if (StringUtils.isNotNull(info) && info.getId().longValue() != menuId.longValue()) {
             return UserConstants.NOT_UNIQUE;
         }
         return UserConstants.UNIQUE;
     }
 
-    /**
-     * 获取路由名称
-     *
-     * @param menu 菜单信息
-     * @return 路由名称
-     */
     public String getRouteName(SysMenu menu) {
-        // 非外链并且是一级目录（类型为目录）
         if (isMenuFrame(menu)) {
             return StringUtils.EMPTY;
         }
         return getRouteName(menu.getRouteName(), menu.getPath());
     }
 
-    /**
-     * 获取路由名称，如没有配置路由名称则取路由地址
-     *
-     * @param name 路由名称
-     * @param path 路由地址
-     * @return 路由名称（驼峰格式）
-     */
     public String getRouteName(String name, String path) {
         String routerName = StringUtils.isNotEmpty(name) ? name : path;
         return StringUtils.capitalize(routerName);
     }
 
-    /**
-     * 获取路由地址
-     *
-     * @param menu 菜单信息
-     * @return 路由地址
-     */
     public String getRouterPath(SysMenu menu) {
         String routerPath = menu.getPath();
-        // 内链打开外网方式
-        if (menu.getParentId() != null && isInnerLink(menu)) {
+        if (!isTopLevel(menu) && isInnerLink(menu)) {
             routerPath = innerLinkReplaceEach(routerPath);
         }
-        // 非外链并且是一级目录（类型为目录）
-        if (menu.getParentId() == null && UserConstants.TYPE_DIR.equals(menu.getMenuType())
+        if (isTopLevel(menu) && UserConstants.TYPE_DIR.equals(menu.getMenuType())
                 && UserConstants.NO_FRAME.equals(menu.getIsFrame())) {
             routerPath = menu.getPath().startsWith("/") ? menu.getPath() : "/" + menu.getPath();
-        }
-        // 非外链并且是一级目录（类型为菜单）
-        else if (isMenuFrame(menu)) {
+        } else if (isMenuFrame(menu)) {
             routerPath = "/";
         }
         return routerPath;
     }
 
-    /**
-     * 获取组件信息
-     *
-     * @param menu 菜单信息
-     * @return 组件信息
-     */
     public String getComponent(SysMenu menu) {
         String component = UserConstants.LAYOUT;
         if (StringUtils.isNotEmpty(menu.getComponent()) && !isMenuFrame(menu)) {
             component = menu.getComponent();
-        } else if (StringUtils.isEmpty(menu.getComponent()) && menu.getParentId() != null && isInnerLink(menu)) {
+        } else if (StringUtils.isEmpty(menu.getComponent()) && !isTopLevel(menu) && isInnerLink(menu)) {
             component = UserConstants.INNER_LINK;
         } else if (StringUtils.isEmpty(menu.getComponent()) && isParentView(menu)) {
             component = UserConstants.PARENT_VIEW;
@@ -272,64 +223,19 @@ public class SysMenuService extends BaseService<SysMenu> {
         return component;
     }
 
-    /**
-     * 是否为菜单内部跳转
-     *
-     * @param menu 菜单信息
-     * @return 结果
-     */
     public boolean isMenuFrame(SysMenu menu) {
-        return menu.getParentId() == null && UserConstants.TYPE_MENU.equals(menu.getMenuType())
+        return isTopLevel(menu) && UserConstants.TYPE_MENU.equals(menu.getMenuType())
                 && menu.getIsFrame().equals(UserConstants.NO_FRAME);
     }
 
-    /**
-     * 是否为内链组件
-     *
-     * @param menu 菜单信息
-     * @return 结果
-     */
     public boolean isInnerLink(SysMenu menu) {
         return menu.getIsFrame().equals(UserConstants.NO_FRAME) && StringUtils.ishttp(menu.getPath());
     }
 
-    /**
-     * 是否为parent_view组件
-     *
-     * @param menu 菜单信息
-     * @return 结果
-     */
     public boolean isParentView(SysMenu menu) {
-        return menu.getParentId() != null && UserConstants.TYPE_DIR.equals(menu.getMenuType());
+        return !isTopLevel(menu) && UserConstants.TYPE_DIR.equals(menu.getMenuType());
     }
 
-    /**
-     * 得到子节点列表
-     */
-    private Set<SysMenu> getChildList(List<SysMenu> list, SysMenu t) {
-        Set<SysMenu> tlist = new HashSet<>();
-        Iterator<SysMenu> it = list.iterator();
-        while (it.hasNext()) {
-            SysMenu n = (SysMenu) it.next();
-            if (t.getId().equals(n.getParentId())) {
-                tlist.add(n);
-            }
-        }
-        return tlist;
-    }
-
-    /**
-     * 判断是否有子节点
-     */
-    private boolean hasChild(List<SysMenu> list, SysMenu t) {
-        return getChildList(list, t).size() > 0;
-    }
-
-    /**
-     * 内链域名特殊字符替换
-     *
-     * @return 替换后的内链域名
-     */
     public String innerLinkReplaceEach(String path) {
         return StringUtils.replaceEach(path, new String[]{Constants.HTTP, Constants.HTTPS, Constants.WWW, ".", ":"},
                 new String[]{"", "", "", "/", "/"});

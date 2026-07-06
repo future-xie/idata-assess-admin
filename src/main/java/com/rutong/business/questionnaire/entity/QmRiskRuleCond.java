@@ -1,9 +1,7 @@
 package com.rutong.business.questionnaire.entity;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.rutong.business.common.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,8 +10,7 @@ import lombok.Setter;
  */
 @Getter
 @Setter
-@Entity
-@Table(name = "qm_risk_rule_cond")
+@TableName("qm_risk_rule_cond")
 public class QmRiskRuleCond extends BaseEntity {
 
     /** 所属规则 ID */
@@ -23,10 +20,8 @@ public class QmRiskRuleCond extends BaseEntity {
     private Long condQuestionId;
 
     /** 操作符：EQ/NE/IN */
-    @Column(length = 16)
     private String op;
 
     /** 条件值（IN 时逗号分隔） */
-    @Column(length = 512)
     private String condValue;
 }

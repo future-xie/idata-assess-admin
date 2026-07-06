@@ -1,52 +1,41 @@
 package com.rutong.business.system.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.rutong.business.common.entity.BaseEntity;
-import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.HashSet;
-import java.util.Set;
-
 @Getter
 @Setter
-@Entity
-@Table(name = "sys_user")
+@TableName("sys_user")
 public class SysUser extends BaseEntity {
 
     private String userName;
     private String nickName;
-    /**
-     * 密码
-     */
+    /** 密码 */
     private String password;
     /** 手机号码 */
     private String phonenumber;
     /** 用户邮箱 */
     private String email;
-    /**
-     * 帐号状态（1正常 0停用）
-     */
+    /** 帐号状态（1正常 0停用） */
     private String status;
 
-    //头像
-    @Column(length = 1024)
+    /** 头像 */
     private String avatar;
 
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    @ManyToMany
-    @JoinTable(
-            name = "sys_user_role",          // 中间表名
-            joinColumns = @JoinColumn(name = "user_id"),   // 当前实体在中间表的外键
-            inverseJoinColumns = @JoinColumn(name = "role_id") // 对方实体在中间表的外键
-    )
-    private Set<SysRole> roles  = new HashSet<>();
+    /** 部门 ID（持久化，对应 dept_id 列；原 JPA @ManyToOne dept 已移除） */
+    @TableField(value = "dept_id")
+    private Long deptId;
 
-    @ManyToOne
-    @JoinColumn(name = "dept_id", nullable = false)
-    private SysDept dept;
+    /** 部门名称（关联 sys_dept 查询得到，不持久化） */
+    @TableField(exist = false)
+    private String deptName;
+
+    /** 角色 ID 列表（新增/编辑用户时维护 sys_user_role，不持久化到 sys_user） */
+    @TableField(exist = false)
+    private java.util.List<Long> roleIds;
 
     public boolean isAdmin() {
         return isAdmin(this.getId());

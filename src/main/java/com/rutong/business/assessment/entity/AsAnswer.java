@@ -1,9 +1,7 @@
 package com.rutong.business.assessment.entity;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.rutong.business.common.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,8 +10,7 @@ import lombok.Setter;
  */
 @Getter
 @Setter
-@Entity
-@Table(name = "as_answer")
+@TableName("as_answer")
 public class AsAnswer extends BaseEntity {
 
     /** 评估实例 ID */
@@ -23,11 +20,9 @@ public class AsAnswer extends BaseEntity {
     private Long questionId;
 
     /** 答案值（JSON） */
-    @Column(columnDefinition = "text")
     private String answerValue;
 
     /** 单题备注（给受访人） */
-    @Column(length = 1024)
     private String remark;
 
     /** 单题风险标记（Y/N） */

@@ -1,9 +1,7 @@
 package com.rutong.business.questionnaire.entity;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.rutong.business.common.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,8 +10,7 @@ import lombok.Setter;
  */
 @Getter
 @Setter
-@Entity
-@Table(name = "qm_risk_rule")
+@TableName("qm_risk_rule")
 public class QmRiskRule extends BaseEntity {
 
     /** 所属模板 ID */
@@ -26,6 +23,5 @@ public class QmRiskRule extends BaseEntity {
     private Long riskLibId;
 
     /** 风险等级：HIGH/MID/LOW（缺省取风险库等级） */
-    @Column(length = 16)
     private String level;
 }

@@ -1,6 +1,5 @@
 package com.rutong.business.questionnaire.controller;
 
-import com.rutong.business.common.service.BaseService;
 import com.rutong.business.questionnaire.entity.QmRiskLib;
 import com.rutong.business.questionnaire.query.QmRiskLibQuery;
 import com.rutong.business.questionnaire.service.QmRiskLibService;
@@ -9,7 +8,7 @@ import com.rutong.framework.bean.PageBean;
 import com.rutong.framework.bean.TableDataInfo;
 import com.rutong.framework.bean.enums.BusinessType;
 import com.rutong.framework.annotation.OperLog;
-import com.rutong.framework.dao.objectquery.SortFilter;
+import com.rutong.framework.mybatis.objectquery.SortFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -37,7 +36,7 @@ public class QmRiskLibController {
     @PreAuthorize("@ss.hasPermi('risk:library:list')")
     @GetMapping("/page")
     public TableDataInfo page(QmRiskLibQuery query, PageBean page) {
-        return getService().findAllByPage(page, query, List.of(new SortFilter("id", SortFilter.DESC)));
+        return riskLibService.findAllByPage(page, query, List.of(new SortFilter("id", SortFilter.DESC)));
     }
 
     /** 详情 */
@@ -67,9 +66,5 @@ public class QmRiskLibController {
     public AjaxResult delete(@PathVariable Long[] ids) {
         riskLibService.deleteByIds(ids);
         return AjaxResult.success();
-    }
-
-    public BaseService getService() {
-        return riskLibService;
     }
 }

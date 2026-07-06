@@ -1,9 +1,8 @@
 package com.rutong.business.system.entity;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.rutong.business.common.entity.BaseEntity;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -14,8 +13,7 @@ import java.util.Date;
  */
 @Getter
 @Setter
-@Entity
-@Table(name = "sys_login_infor")
+@TableName("sys_login_infor")
 public class SysLogininfor extends BaseEntity {
     private static final long serialVersionUID = 1L;
 

@@ -6,7 +6,7 @@ import com.rutong.framework.annotation.OperLog;
 import com.rutong.framework.constant.UserConstants;
 import com.rutong.framework.security.SecurityUtils;
 import com.rutong.framework.utils.StringUtils;
-import com.rutong.business.common.service.BaseService;
+import com.rutong.framework.service.MpBaseService;
 import com.rutong.business.system.entity.SysMenu;
 import com.rutong.business.system.query.SysMenuQuery;
 import com.rutong.business.system.service.SysMenuService;
@@ -59,7 +59,8 @@ public class SysMenuController {
     @PreAuthorize("@ss.hasPermi('system:menu:list')")
     @GetMapping(value = "/roleMenuTreeselect/{roleId}")
     public AjaxResult roleMenuTreeselect(@PathVariable("roleId") Long roleId) {
-        List<SysMenu> menus = menuService.selectMenuByUserId(SecurityUtils.getUserId());
+        // 角色授权需展示全部菜单（含按钮 F 级操作权限）
+        List<SysMenu> menus = menuService.selectAllMenuTree();
         AjaxResult ajax = AjaxResult.success();
         ajax.put("checkedKeys", menuService.selectMenuListByRoleId(roleId));
         ajax.put("menus", menuService.buildMenuTreeSelect(menus));
@@ -123,7 +124,7 @@ public class SysMenuController {
         return AjaxResult.success();
     }
 
-    public BaseService getService() {
+    public MpBaseService<SysMenu> getService() {
         return menuService;
     }
 }

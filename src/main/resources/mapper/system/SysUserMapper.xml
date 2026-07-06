@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rutong.business.system.mapper.SysUserMapper">
+
+    <!-- 用户结果集：关联 sys_dept 取 dept_name，其余列依赖驼峰自动映射 -->
+    <resultMap id="userResultMap" type="com.rutong.business.system.entity.SysUser" autoMapping="true">
+        <result column="dept_name" property="deptName"/>
+    </resultMap>
+
+    <!-- 用户分页：JOIN sys_dept 取部门名；支持 deptId/deptIds/用户名/手机号/状态 过滤 -->
+    <select id="selectUserPage" resultMap="userResultMap">
+        SELECT u.*, d.dept_name
+        FROM sys_user u
+        LEFT JOIN sys_dept d ON u.dept_id = d.id
+        <where>
+            <if test="query.deptIds != null and !query.deptIds.isEmpty()">
+                AND u.dept_id IN
+                <foreach collection="query.deptIds" item="did" open="(" separator="," close=")">#{did}</foreach>
+            </if>
+            <if test="query.userName != null and query.userName != ''">
+                AND u.user_name LIKE CONCAT('%', #{query.userName}, '%')
+            </if>
+            <if test="query.phonenumber != null and query.phonenumber != ''">
+                AND u.phonenumber LIKE CONCAT('%', #{query.phonenumber}, '%')
+            </if>
+            <if test="query.status != null and query.status != ''">
+                AND u.status = #{query.status}
+            </if>
+        </where>
+        ORDER BY u.id DESC
+    </select>
+
+    <!-- 删除用户-角色关联（批量，删除用户时调用） -->
+    <delete id="deleteUserRoleByUserIds">
+        DELETE FROM sys_user_role WHERE user_id IN
+        <foreach collection="userIds" item="uid" open="(" separator="," close=")">#{uid}</foreach>
+    </delete>
+
+    <!-- 批量插入用户-角色关联 -->
+    <insert id="insertUserRoles">
+        INSERT INTO sys_user_role(user_id, role_id) VALUES
+        <foreach collection="roleIds" item="rid" separator=",">(#{userId}, #{rid})</foreach>
+    </insert>
+
+</mapper>

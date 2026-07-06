@@ -1,0 +1,1 @@
+import{C as e,N as t,j as n,s as r}from"./index-CIK0Eu_v.js";var i={};function a(r,i){let a=t(`router-view`);return n(),e(a)}var o=r(i,[[`render`,a]]);export{o as default};

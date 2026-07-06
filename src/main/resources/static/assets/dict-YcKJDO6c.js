@@ -1,0 +1,1 @@
+var e=[{value:`0`,label:`成功`,type:`success`},{value:`1`,label:`失败`,type:`danger`}],t=[{value:`0`,label:`正常`,type:`success`},{value:`1`,label:`停用`,type:`danger`}];function n(e,t){return e.find(e=>String(e.value)===String(t))}export{t as n,n as r,e as t};

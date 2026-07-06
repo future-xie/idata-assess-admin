@@ -2,9 +2,6 @@ package com.rutong.business.system.entity;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.rutong.business.common.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -15,8 +12,6 @@ import java.util.Date;
  */
 @Getter
 @Setter
-@Entity
-@Table(name = "sys_oper_log")
 public class SysOperLog extends BaseEntity {
     private static final long serialVersionUID = 1L;
 
@@ -68,13 +63,11 @@ public class SysOperLog extends BaseEntity {
     /**
      * 请求参数
      */
-    @Column(columnDefinition = "text")
     private String operParam;
 
     /**
      * 返回参数
      */
-    @Column(length = 1024)
     private String jsonResult;
 
     /**
@@ -85,7 +78,6 @@ public class SysOperLog extends BaseEntity {
     /**
      * 错误消息
      */
-    @Column(length = 1024)
     private String errorMsg;
 
     /**

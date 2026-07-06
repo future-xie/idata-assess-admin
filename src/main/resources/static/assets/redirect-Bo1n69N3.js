@@ -1,0 +1,1 @@
+import{T as e,a as t,j as n,k as r,o as i}from"./index-CIK0Eu_v.js";var a={__name:`index`,setup(a){let o=t(),s=i();return r(()=>{let{params:e,query:t}=o,n=`/`+(Array.isArray(e.path)?e.path.join(`/`):e.path);s.replace({path:n,query:t})}),(t,r)=>(n(),e(`div`))}};export{a as default};

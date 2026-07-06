@@ -1,9 +1,7 @@
 package com.rutong.business.questionnaire.entity;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.rutong.business.common.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -14,8 +12,7 @@ import lombok.Setter;
  */
 @Getter
 @Setter
-@Entity
-@Table(name = "qm_question")
+@TableName("qm_question")
 public class QmQuestion extends BaseEntity {
 
     /** 所属模板 ID */
@@ -28,7 +25,6 @@ public class QmQuestion extends BaseEntity {
     private String questionType;
 
     /** 题干（支持管道占位 ${Qxxx}） */
-    @Column(length = 1024)
     private String title;
 
     /** 是否必填（Y/N） */
@@ -43,10 +39,8 @@ public class QmQuestion extends BaseEntity {
     /** 最大字数 */
     private Integer maxLen;
     /** 正则校验表达式 */
-    @Column(length = 512)
     private String regex;
     /** 输入提示 */
-    @Column(length = 255)
     private String placeholder;
 
     // ===== 上传题（UPLOAD）参数 =====
@@ -55,6 +49,5 @@ public class QmQuestion extends BaseEntity {
     /** 单文件最大字节数 */
     private Long maxSize;
     /** 允许的文件类型，如 .jpg,.png */
-    @Column(length = 255)
     private String accept;
 }

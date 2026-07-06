@@ -1,10 +1,8 @@
 package com.rutong.business.assessment.entity;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.rutong.business.common.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -15,8 +13,7 @@ import java.util.Date;
  */
 @Getter
 @Setter
-@Entity
-@Table(name = "as_comment")
+@TableName("as_comment")
 public class AsComment extends BaseEntity {
 
     /** 评估实例 ID */
@@ -26,6 +23,5 @@ public class AsComment extends BaseEntity {
     private Long questionId;
 
     /** 注释内容 */
-    @Column(length = 1024)
     private String content;
 }

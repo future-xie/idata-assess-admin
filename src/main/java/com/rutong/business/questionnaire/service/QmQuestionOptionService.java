@@ -1,7 +1,8 @@
 package com.rutong.business.questionnaire.service;
 
-import com.rutong.business.common.service.BaseService;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.rutong.business.questionnaire.entity.QmQuestionOption;
+import com.rutong.framework.service.MpBaseService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,34 +14,33 @@ import java.util.List;
  * 题目选项 业务层（题型配置子表）
  */
 @Service
-public class QmQuestionOptionService extends BaseService<QmQuestionOption> {
+public class QmQuestionOptionService extends MpBaseService<QmQuestionOption> {
 
     /**
      * 按题目查询选项
      */
     public List<QmQuestionOption> listByQuestion(Long questionId) {
-        return dao.findByProperty(QmQuestionOption.class, "questionId", questionId);
+        return lambdaQuery().eq(QmQuestionOption::getQuestionId, questionId).list();
     }
 
     /**
      * 按多个题目 ID 批量查询选项（避免 N+1）
      */
-    @SuppressWarnings("unchecked")
     public List<QmQuestionOption> listByQuestionIds(List<Long> questionIds) {
         if (questionIds == null || questionIds.isEmpty()) {
             return Collections.emptyList();
         }
-        return dao.executeHqlInQuery(QmQuestionOption.class,
-                "from QmQuestionOption o where o.questionId in (:ids) order by o.orderNum",
-                "ids", questionIds);
+        return lambdaQuery().in(QmQuestionOption::getQuestionId, questionIds)
+                .orderByAsc(QmQuestionOption::getOrderNum).list();
     }
 
     /**
      * 替换某题目的全部选项（先删后插）
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void replaceOptions(Long questionId, List<QmQuestionOption> options) {
-        dao.deleteByProperty(QmQuestionOption.class, "questionId", questionId);
+        remove(new LambdaQueryWrapper<QmQuestionOption>()
+                .eq(QmQuestionOption::getQuestionId, questionId));
         if (options == null || options.isEmpty()) {
             return;
         }
@@ -59,15 +59,16 @@ public class QmQuestionOptionService extends BaseService<QmQuestionOption> {
             toSave.add(o);
         }
         if (!toSave.isEmpty()) {
-            dao.bulkSave(toSave);
+            saveBatch(toSave);
         }
     }
 
     /**
      * 删除某题目的全部选项
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int deleteByQuestion(Long questionId) {
-        return dao.deleteByProperty(QmQuestionOption.class, "questionId", questionId);
+        return baseMapper.delete(new LambdaQueryWrapper<QmQuestionOption>()
+                .eq(QmQuestionOption::getQuestionId, questionId));
     }
 }

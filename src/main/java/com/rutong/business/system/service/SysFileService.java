@@ -1,8 +1,8 @@
 package com.rutong.business.system.service;
 
-import com.rutong.business.common.service.BaseService;
 import com.rutong.business.system.entity.SysFile;
 import com.rutong.configuration.ApplicationConfig;
+import com.rutong.framework.service.MpBaseService;
 import com.rutong.framework.utils.file.FileUtils;
 import org.apache.commons.lang3.time.DateFormatUtils;
 import org.springframework.stereotype.Service;
@@ -15,11 +15,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Service
-public class SysFileService extends BaseService<SysFile> {
+public class SysFileService extends MpBaseService<SysFile> {
 
     /**
      * 上传文件：写入磁盘并落 sys_file，返回 {id, fileName, path, url}。
-     * 使用 insertNoAuth（不依赖登录用户），故可供免登的问卷填写端调用。
+     * 免登场景无登录用户，AutoMetaObjectHandler 填充 createBy 时取不到用户名→跳过（与原 insertNoAuth 等效）。
      */
     public Map<String, Object> upload(MultipartFile file) throws Exception {
         String fileName = file.getOriginalFilename();
@@ -36,7 +36,7 @@ public class SysFileService extends BaseService<SysFile> {
 
         File dest = FileUtils.touch(ApplicationConfig.ATTACH_DIR_PATH + relativePath);
         file.transferTo(dest);
-        insertNoAuth(sysFile); // 不写 createBy，避免免登场景下获取登录用户异常
+        save(sysFile);
 
         Map<String, Object> result = new HashMap<>();
         result.put("id", sysFile.getId());

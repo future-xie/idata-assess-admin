@@ -4,8 +4,10 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 
 public class LoginUser implements UserDetails {
@@ -91,7 +93,16 @@ public class LoginUser implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return Collections.emptyList();
+        // 将 permissions 转为 GrantedAuthority，使标准 @PreAuthorize("hasAuthority(...)") 生效；
+        // 项目自定义 @ss.hasPermi 仍走 getPermissions()，互不影响。
+        if (permissions == null || permissions.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<GrantedAuthority> authorities = new ArrayList<>(permissions.size());
+        for (String perm : permissions) {
+            authorities.add(() -> perm);
+        }
+        return authorities;
     }
 
     @Override

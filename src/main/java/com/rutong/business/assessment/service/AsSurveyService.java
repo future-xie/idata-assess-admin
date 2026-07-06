@@ -9,12 +9,19 @@ import com.rutong.business.assessment.entity.AsSurvey;
 import com.rutong.business.assessment.pojo.AssignItem;
 import com.rutong.business.assessment.pojo.DistributeBody;
 import com.rutong.business.assessment.pojo.StatisticsVo;
-import com.rutong.business.common.service.BaseService;
+import com.rutong.business.assessment.mapper.AsAnswerHistoryMapper;
+import com.rutong.business.assessment.mapper.AsAnswerMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.rutong.business.questionnaire.constant.QuestionConstants;
 import com.rutong.business.questionnaire.entity.QmChapter;
 import com.rutong.business.questionnaire.entity.QmQuestion;
 import com.rutong.business.questionnaire.entity.QmRiskRuleCond;
 import com.rutong.business.questionnaire.entity.QmTemplate;
+import com.rutong.business.questionnaire.mapper.QmTemplateMapper;
 import com.rutong.business.system.entity.SysUser;
+import com.rutong.business.system.mapper.SysUserMapper;
 import com.rutong.business.questionnaire.pojo.QuestionVo;
 import com.rutong.business.questionnaire.pojo.RiskRuleVo;
 import com.rutong.business.questionnaire.service.QmChapterService;
@@ -23,8 +30,9 @@ import com.rutong.business.questionnaire.service.QmRiskRuleService;
 import com.rutong.business.assessment.query.AsSurveyQuery;
 import com.rutong.framework.bean.PageBean;
 import com.rutong.framework.bean.TableDataInfo;
-import com.rutong.framework.dao.objectquery.SortFilter;
+import com.rutong.framework.mybatis.objectquery.SortFilter;
 import com.rutong.framework.exception.ServiceException;
+import com.rutong.framework.service.MpBaseService;
 import com.rutong.framework.mail.MailService;
 import com.rutong.framework.security.SecurityUtils;
 import com.rutong.framework.utils.StringUtils;
@@ -48,9 +56,21 @@ import java.util.stream.Collectors;
  * 评估/分发 业务层
  */
 @Service
-public class AsSurveyService extends BaseService<AsSurvey> {
+public class AsSurveyService extends MpBaseService<AsSurvey> {
 
     private static final Logger log = LoggerFactory.getLogger(AsSurveyService.class);
+
+    @Autowired
+    private QmTemplateMapper qmTemplateMapper;
+
+    @Autowired
+    private SysUserMapper sysUserMapper;
+
+    @Autowired
+    private AsAnswerMapper asAnswerMapper;
+
+    @Autowired
+    private AsAnswerHistoryMapper asAnswerHistoryMapper;
 
     @Autowired
     private AsAnswerHistoryService answerHistoryService;
@@ -78,7 +98,7 @@ public class AsSurveyService extends BaseService<AsSurvey> {
      *
      * @return 生成的实例列表（含 fillToken）
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public List<AsSurvey> distribute(DistributeBody body) {
         if (body.getTemplateId() == null) {
             throw new ServiceException("评估模板不能为空");
@@ -86,9 +106,12 @@ public class AsSurveyService extends BaseService<AsSurvey> {
         if (body.getAssignments() == null || body.getAssignments().isEmpty()) {
             throw new ServiceException("受访人不能为空");
         }
-        QmTemplate template = dao.findById(QmTemplate.class, body.getTemplateId());
+        QmTemplate template = qmTemplateMapper.selectById(body.getTemplateId());
         if (template == null) {
             throw new ServiceException("模板不存在");
+        }
+        if (!QuestionConstants.STATUS_PUBLISHED.equals(template.getStatus())) {
+            throw new ServiceException("仅已发布的模板可发起评估");
         }
         String title = StringUtils.isEmpty(body.getTitle()) ? template.getTemplateName() : body.getTitle();
         Long operUserId = SecurityUtils.getUserId();
@@ -99,7 +122,7 @@ public class AsSurveyService extends BaseService<AsSurvey> {
             if (a == null || a.getUserId() == null) {
                 continue;
             }
-            SysUser user = dao.findById(SysUser.class, a.getUserId());
+            SysUser user = sysUserMapper.selectById(a.getUserId());
             if (user == null) {
                 continue;
             }
@@ -115,8 +138,13 @@ public class AsSurveyService extends BaseService<AsSurvey> {
             s.setAssessorIds(assessorIds);
             s.setDueDate(body.getDueDate());
             s.setChapterScope(joinIds(a.getChapterIds()));
-            insert(s); // 写 createBy，便于数据权限过滤
             created.add(s);
+        }
+        // 批量插入并回填 id（createBy 由 AutoMetaObjectHandler 在 insert 时填充）
+        if (!created.isEmpty()) {
+            saveBatch(created);
+        }
+        for (AsSurvey s : created) {
             sendDistributionMail(s);
         }
         return created;
@@ -126,7 +154,7 @@ public class AsSurveyService extends BaseService<AsSurvey> {
      * 修改评估基本信息（标题/受访人/评估人/截止日期/章节范围）。
      * 仅分发人或管理员可改；受访人变更时反查 SysUser 同步姓名/邮箱。
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public AsSurvey updateSurvey(AsSurvey body) {
         AsSurvey survey = findById(body.getId());
         if (survey == null) {
@@ -137,7 +165,7 @@ public class AsSurveyService extends BaseService<AsSurvey> {
             throw new ServiceException("无权修改该评估");
         }
         if (body.getRespondentUserId() != null) {
-            SysUser user = dao.findById(SysUser.class, body.getRespondentUserId());
+            SysUser user = sysUserMapper.selectById(body.getRespondentUserId());
             if (user == null) {
                 throw new ServiceException("受访人不存在");
             }
@@ -174,13 +202,14 @@ public class AsSurveyService extends BaseService<AsSurvey> {
     /**
      * 提交答卷（按 ID）
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public AsSurvey submitById(Long surveyId, List<AsAnswer> answers) {
         AsSurvey survey = findById(surveyId);
         if (survey == null) {
             throw new ServiceException("评估实例不存在");
         }
         ensureRespondent(surveyId);
+        ensureNotFinished(survey);
         return doSubmit(survey, answers);
     }
 
@@ -191,8 +220,9 @@ public class AsSurveyService extends BaseService<AsSurvey> {
         // 原地更新答案（有变化时记录历史）
         upsertAnswers(survey.getId(), inputAnswers);
 
-        // 单题风险记录
+        // 单题风险记录（批量插入）
         List<AsAnswer> answers = inputAnswers == null ? new ArrayList<>() : inputAnswers;
+        List<AsRiskRecord> risks = new ArrayList<>();
         for (AsAnswer a : answers) {
             if (AssessConstants.YES.equalsIgnoreCase(a.getRiskFlag())) {
                 AsRiskRecord risk = new AsRiskRecord();
@@ -202,8 +232,11 @@ public class AsSurveyService extends BaseService<AsSurvey> {
                 risk.setLevel(AssessConstants.LEVEL_MID);
                 risk.setHandleStatus(AssessConstants.HANDLE_PENDING);
                 risk.setProcessStatus(AssessConstants.PROCESS_STATUS_UNPROCESSED);
-                dao.save(risk);
+                risks.add(risk);
             }
+        }
+        if (!risks.isEmpty()) {
+            riskRecordService.saveBatch(risks);
         }
 
         // 命中风险规则则自动生成风险记录
@@ -220,13 +253,14 @@ public class AsSurveyService extends BaseService<AsSurvey> {
      * 保存答卷（草稿，不校验必填、不提交、不触发风险）：原地更新答案，状态置为填写中。
      * 已"审核中"或"已退回"的实例不再切换为填写中(前者等待审核结果,后者需显式重填)。
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public AsSurvey saveAnswers(Long surveyId, List<AsAnswer> inputAnswers) {
         AsSurvey survey = findById(surveyId);
         if (survey == null) {
             throw new ServiceException("评估实例不存在");
         }
         ensureRespondent(surveyId);
+        ensureNotFinished(survey);
         upsertAnswers(surveyId, inputAnswers);
         if (!AssessConstants.STATUS_REVIEWING.equals(survey.getStatus())
                 && !AssessConstants.STATUS_RETURNED.equals(survey.getStatus())) {
@@ -244,7 +278,7 @@ public class AsSurveyService extends BaseService<AsSurvey> {
         if (survey == null) {
             throw new ServiceException("评估实例不存在");
         }
-        QmTemplate template = dao.findById(QmTemplate.class, survey.getTemplateId());
+        QmTemplate template = qmTemplateMapper.selectById(survey.getTemplateId());
         List<QmQuestion> allQuestions = questionService.listByTemplate(survey.getTemplateId());
         // 章节范围过滤
         Set<Long> scope = null;
@@ -296,7 +330,10 @@ public class AsSurveyService extends BaseService<AsSurvey> {
         result.put("riskRecordCountByQuestion", riskRecordCountByQuestion);
         result.put("pendingCountByChapter", pendingCountByChapter);
         result.put("answers", latestAnswers(id));
-        result.put("currentRole", currentRole(id));
+        // 角色独立判定（一人可同时为填写人和审核人），前端据此显隐按钮：
+        // 填写人 -> 保存/提交；审核人 -> 发回/完成审核
+        result.put("isRespondent", isRespondent(id));
+        result.put("isReviewer", isReviewer(id));
         return result;
     }
 
@@ -372,6 +409,7 @@ public class AsSurveyService extends BaseService<AsSurvey> {
                 answerMap.put(a.getQuestionId(), a.getAnswerValue() == null ? "" : a.getAnswerValue());
             }
         }
+        List<AsRiskRecord> hitRisks = new ArrayList<>();
         for (RiskRuleVo rule : rules) {
             List<QmRiskRuleCond> conds = rule.getConditions();
             if (conds == null || conds.isEmpty()) {
@@ -395,8 +433,11 @@ public class AsSurveyService extends BaseService<AsSurvey> {
                 risk.setLevel(StringUtils.isEmpty(rule.getLevel()) ? AssessConstants.LEVEL_MID : rule.getLevel());
                 risk.setHandleStatus(AssessConstants.HANDLE_PENDING);
                 risk.setProcessStatus(AssessConstants.PROCESS_STATUS_UNPROCESSED);
-                dao.save(risk);
+                hitRisks.add(risk);
             }
+        }
+        if (!hitRisks.isEmpty()) {
+            riskRecordService.saveBatch(hitRisks);
         }
     }
 
@@ -425,7 +466,7 @@ public class AsSurveyService extends BaseService<AsSurvey> {
     /**
      * 退回重填(仅"审核中"状态的答卷可退回)
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int returnBack(Long surveyId, String reason) {
         AsSurvey survey = findById(surveyId);
         if (survey == null) {
@@ -446,7 +487,7 @@ public class AsSurveyService extends BaseService<AsSurvey> {
      * 发回:审核中 → 进行中(允许受访人/评估人继续编辑)。
      * 与 returnBack 的区别:returnBack 进入"已退回"状态,sendBack 直接回退到"进行中"。
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public AsSurvey sendBack(Long surveyId) {
         AsSurvey survey = findById(surveyId);
         if (survey == null) {
@@ -466,7 +507,7 @@ public class AsSurveyService extends BaseService<AsSurvey> {
      * @param result  APPROVED / REJECTED
      * @param comment 审核备注(可选,会写入 AsSurvey.remark)
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public AsSurvey review(Long surveyId, String result, String comment) {
         AsSurvey survey = findById(surveyId);
         if (survey == null) {
@@ -493,17 +534,14 @@ public class AsSurveyService extends BaseService<AsSurvey> {
     /**
      * 过程监控统计
      */
+    @Transactional(readOnly = true)
     public StatisticsVo statistics(Long templateId) {
-        List<AsSurvey> all = dao.findByProperty(AsSurvey.class, "templateId", templateId);
-        long submitted = 0, returned = 0;
-        for (AsSurvey s : all) {
-            if (AssessConstants.STATUS_REVIEWING.equals(s.getStatus())) {
-                submitted++;
-            } else if (AssessConstants.STATUS_RETURNED.equals(s.getStatus())) {
-                returned++;
-            }
-        }
-        long total = all.size();
+        // 用 count 下推到数据库，避免全表加载后内存循环统计
+        long total = lambdaQuery().eq(AsSurvey::getTemplateId, templateId).count();
+        long submitted = lambdaQuery().eq(AsSurvey::getTemplateId, templateId)
+                .eq(AsSurvey::getStatus, AssessConstants.STATUS_REVIEWING).count();
+        long returned = lambdaQuery().eq(AsSurvey::getTemplateId, templateId)
+                .eq(AsSurvey::getStatus, AssessConstants.STATUS_RETURNED).count();
         long recovered = submitted + returned;
         StatisticsVo vo = new StatisticsVo();
         vo.setTotal(total);
@@ -519,53 +557,51 @@ public class AsSurveyService extends BaseService<AsSurvey> {
      * 查询某实例全部答案（每题一行，无版本）
      */
     public List<AsAnswer> latestAnswers(Long surveyId) {
-        return dao.findByProperty(AsAnswer.class, "surveyId", surveyId);
+        return asAnswerMapper.selectList(new LambdaQueryWrapper<AsAnswer>().eq(AsAnswer::getSurveyId, surveyId));
     }
 
     /**
      * 列表（按当前用户可见范围）：管理员全部；
      * 否则仅返回 respondentUserId=自己 / assessorIds 含自己 / 自己分发(createBy) 的问卷。
-     * 绕过默认 @DataScope（它按 createBy 过滤，不适合受访人）。
+     * as_survey 不在 DataPermissionInterceptor 拦截范围（拦截器只管 qm_template/qm_risk_lib），
+     * 且需受访人/评估人/分发人多维可见，故此处自行构建可见条件。
      */
     public TableDataInfo listForCurrentUser(PageBean page, AsSurveyQuery query, List<SortFilter> sorts) {
         Long uid = SecurityUtils.getUserId();
         String username = SecurityUtils.getUsername();
-        StringBuilder where = new StringBuilder(" where 1=1 ");
-        List<Object> params = new ArrayList<>();
+
+        QueryWrapper<AsSurvey> wrapper = new QueryWrapper<>();
         if (query != null) {
             if (query.getTemplateId() != null) {
-                where.append(" and s.templateId = ?");
-                params.add(query.getTemplateId());
+                wrapper.eq("template_id", query.getTemplateId());
             }
             if (StringUtils.isNotEmpty(query.getStatus())) {
-                where.append(" and s.status = ?");
-                params.add(query.getStatus());
+                wrapper.eq("status", query.getStatus());
             }
             if (StringUtils.isNotEmpty(query.getRespondentName())) {
-                where.append(" and s.respondentName like ?");
-                params.add("%" + query.getRespondentName() + "%");
+                wrapper.like("respondent_name", query.getRespondentName());
             }
             if (StringUtils.isNotEmpty(query.getRespondentEmail())) {
-                where.append(" and s.respondentEmail like ?");
-                params.add("%" + query.getRespondentEmail() + "%");
+                wrapper.like("respondent_email", query.getRespondentEmail());
             }
         }
         if (!SecurityUtils.isAdmin(uid)) {
-            where.append(" and (s.respondentUserId = ? or s.createBy = ? or concat(',', coalesce(s.assessorIds,''), ',') like ?)");
-            params.add(uid);
-            params.add(username);
-            params.add("%," + uid + ",%");
+            // 受访人 / 分发人(createBy) / 评估人(assessorIds 含自己) 三选一可见；
+            // as_survey 不走 DataPermissionInterceptor（拦截器仅管 qm_template/qm_risk_lib）
+            wrapper.and(w -> w.eq("respondent_user_id", uid)
+                    .or().eq("create_by", username)
+                    .or().apply("concat(',', coalesce(assessor_ids,''), ',') like {0}", "%," + uid + ",%"));
         }
-        Object[] arr = params.toArray();
-        long total = dao.executeHqlCountQuery(Long.class, "select count(s.id) from AsSurvey s" + where, arr);
+        wrapper.orderByDesc("id");
+
+        long total = baseMapper.selectCount(wrapper);
         TableDataInfo rsp = new TableDataInfo();
         rsp.setTotal(total);
         if (total > 0) {
-            org.hibernate.query.Query<AsSurvey> q = dao.getHqlQuery(AsSurvey.class,
-                    "from AsSurvey s" + where + " order by s.id desc", arr, null);
-            q.setFirstResult(page.getStart());
-            q.setMaxResults(page.getPageSize());
-            rsp.setRows(q.list());
+            Page<AsSurvey> p = page.toPage();
+            List<AsSurvey> records = baseMapper.selectPage(p, wrapper).getRecords();
+            enrichAssessorNames(records);
+            rsp.setRows(records);
         } else {
             rsp.setRows(new ArrayList<>());
         }
@@ -574,26 +610,77 @@ public class AsSurveyService extends BaseService<AsSurvey> {
         return rsp;
     }
 
+    /** 列表展示用：把 assessorIds（逗号分隔 ID）解析为审核人姓名（逗号分隔），批量查询避免 N+1 */
+    private void enrichAssessorNames(List<AsSurvey> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        Set<Long> allIds = new HashSet<>();
+        for (AsSurvey s : rows) {
+            allIds.addAll(parseLongCsv(s.getAssessorIds()));
+        }
+        if (allIds.isEmpty()) {
+            return;
+        }
+        Map<Long, String> nameMap = sysUserMapper.selectBatchIds(allIds).stream()
+                .collect(Collectors.toMap(SysUser::getId,
+                        u -> StringUtils.isNotEmpty(u.getNickName()) ? u.getNickName() : u.getUserName(),
+                        (a, b) -> a));
+        for (AsSurvey s : rows) {
+            List<String> names = new ArrayList<>();
+            for (Long id : parseLongCsv(s.getAssessorIds())) {
+                String nm = nameMap.get(id);
+                if (nm != null) {
+                    names.add(nm);
+                }
+            }
+            s.setAssessorNames(String.join(",", names));
+        }
+    }
+
+    /** 逗号分隔的数字串 → Long 列表（忽略非数字片段） */
+    private static List<Long> parseLongCsv(String csv) {
+        List<Long> ids = new ArrayList<>();
+        if (csv == null || csv.isEmpty()) {
+            return ids;
+        }
+        for (String t : csv.split(",")) {
+            try {
+                ids.add(Long.parseLong(t.trim()));
+            } catch (NumberFormatException ignore) {
+            }
+        }
+        return ids;
+    }
+
     /**
      * 当前登录用户在本问卷的角色：RESPONDENT 受访人 / REVIEWER 审核人 / null 无归属。
      * 管理员(id=1)若无归属视为 REVIEWER，便于管理端审批。
      */
-    public String currentRole(Long surveyId) {
+    /**
+     * 当前用户是否为填写人（可填写/保存/提交）：仅受访人。
+     * 分发人/创建人只有查看权限，不属于填写人。
+     */
+    public boolean isRespondent(Long surveyId) {
         AsSurvey survey = findById(surveyId);
         if (survey == null) {
-            return null;
+            return false;
         }
         Long uid = SecurityUtils.getUserId();
-        if (uid != null && uid.equals(survey.getRespondentUserId())) {
-            return AssessConstants.ROLE_RESPONDENT;
+        return uid != null && uid.equals(survey.getRespondentUserId());
+    }
+
+    /**
+     * 当前用户是否为审核人（可审核/发回/标记风险）：评估人(assessorIds)或管理员。
+     * 与 isRespondent 独立，一人可同时为填写人和审核人。
+     */
+    public boolean isReviewer(Long surveyId) {
+        AsSurvey survey = findById(surveyId);
+        if (survey == null) {
+            return false;
         }
-        if (containsAssessor(survey.getAssessorIds(), uid)) {
-            return AssessConstants.ROLE_REVIEWER;
-        }
-        if (SecurityUtils.isAdmin(uid)) {
-            return AssessConstants.ROLE_REVIEWER;
-        }
-        return null;
+        Long uid = SecurityUtils.getUserId();
+        return containsAssessor(survey.getAssessorIds(), uid) || SecurityUtils.isAdmin(uid);
     }
 
     /** assessorIds（逗号分隔）是否包含 uid */
@@ -615,33 +702,43 @@ public class AsSurveyService extends BaseService<AsSurvey> {
     /**
      * 创建题目修改请求：发起方由后端按当前用户归属自动判定（不信前端），无归属则拒绝。
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public AsRequest createRequest(Long surveyId, Long questionId, String content) {
-        String role = currentRole(surveyId);
-        if (role == null) {
+        boolean resp = isRespondent(surveyId);
+        boolean rev = isReviewer(surveyId);
+        if (!resp && !rev) {
             throw new ServiceException("您无权对该问卷发起请求");
         }
         AsRequest r = new AsRequest();
         r.setSurveyId(surveyId);
         r.setQuestionId(questionId);
         r.setContent(content);
-        r.setSenderType(role);
+        // 同时具备两个角色时按填写人记录（填写人发起修改请求更常见）
+        r.setSenderType(resp ? AssessConstants.ROLE_RESPONDENT : AssessConstants.ROLE_REVIEWER);
         r.setSenderUserId(SecurityUtils.getUserId());
         requestService.insert(r);
         return r;
     }
 
-    /** 校验当前用户是该问卷的受访人 */
+    /** 校验当前用户是填写人(受访人) */
     private void ensureRespondent(Long surveyId) {
-        if (!AssessConstants.ROLE_RESPONDENT.equals(currentRole(surveyId))) {
+        if (!isRespondent(surveyId)) {
             throw new ServiceException("仅受访人可填写/提交答卷");
         }
     }
 
-    /** 校验当前用户是该问卷的审核人 */
+    /** 校验当前用户是审核人(评估人或管理员) */
     private void ensureReviewer(Long surveyId) {
-        if (!AssessConstants.ROLE_REVIEWER.equals(currentRole(surveyId))) {
+        if (!isReviewer(surveyId)) {
             throw new ServiceException("仅审核人可执行该操作");
+        }
+    }
+
+    /** 校验评估未审核完成（APPROVED/REJECTED 后不可再改答案） */
+    private void ensureNotFinished(AsSurvey survey) {
+        if (AssessConstants.STATUS_APPROVED.equals(survey.getStatus())
+                || AssessConstants.STATUS_REJECTED.equals(survey.getStatus())) {
+            throw new ServiceException("评估已审核完成，不可修改");
         }
     }
 
@@ -654,7 +751,7 @@ public class AsSurveyService extends BaseService<AsSurvey> {
         }
         // 加载现有答案 map: questionId → AsAnswer
         Map<Long, AsAnswer> existing = new HashMap<>();
-        for (AsAnswer a : dao.findByProperty(AsAnswer.class, "surveyId", surveyId)) {
+        for (AsAnswer a : asAnswerMapper.selectList(new LambdaQueryWrapper<AsAnswer>().eq(AsAnswer::getSurveyId, surveyId))) {
             existing.put(a.getQuestionId(), a);
         }
         for (AsAnswer incoming : inputAnswers) {
@@ -674,7 +771,7 @@ public class AsSurveyService extends BaseService<AsSurvey> {
                 a.setAnswerValue(newVal);
                 a.setRemark(newRemark);
                 a.setRiskFlag(newRisk);
-                dao.save(a);
+                asAnswerMapper.insert(a);
                 // 记录历史（空 → 新值）
                 if (!newVal.isEmpty()) {
                     recordHistory(surveyId, incoming.getQuestionId(), "", newVal);
@@ -690,7 +787,7 @@ public class AsSurveyService extends BaseService<AsSurvey> {
                     cur.setAnswerValue(newVal);
                     cur.setRemark(newRemark);
                     cur.setRiskFlag(newRisk);
-                    dao.update(cur);
+                    asAnswerMapper.updateById(cur);
                 }
             }
         }
@@ -705,7 +802,7 @@ public class AsSurveyService extends BaseService<AsSurvey> {
         h.setQuestionId(questionId);
         h.setOldValue(oldValue);
         h.setNewValue(newValue);
-        dao.save(h);
+        asAnswerHistoryMapper.insert(h);
     }
 
     // ===================== 私有辅助 =====================

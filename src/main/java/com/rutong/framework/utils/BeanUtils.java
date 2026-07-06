@@ -1,6 +1,5 @@
 package com.rutong.framework.utils;
 
-import org.apache.commons.beanutils.ContextClassLoaderLocal;
 import org.apache.commons.beanutils.ConvertUtilsBean;
 import org.apache.commons.beanutils.converters.BigDecimalConverter;
 import org.apache.commons.beanutils.converters.DateConverter;
@@ -90,17 +89,12 @@ public class BeanUtils extends org.apache.commons.beanutils.BeanUtils {
 }
 
 class MyBeanUtilsBean extends org.apache.commons.beanutils.BeanUtilsBean {
-	private static List<String> includes = null;
-
-	private static final ContextClassLoaderLocal<?> BEANS_BY_CLASSLOADER = new ContextClassLoaderLocal<Object>() {
-		protected Object initialValue() {
-			return new MyBeanUtilsBean();
-		}
-	};
+	/** 仅拷贝这些字段（null 表示全部）。实例字段 + 每次新建实例，避免并发调用互相覆盖。 */
+	private List<String> includes = null;
 
 	public static MyBeanUtilsBean getInstance(String[] includes) {
-		MyBeanUtilsBean.includes = includes == null ? null : Arrays.asList(includes);
-		MyBeanUtilsBean beanUtilsBean = ((MyBeanUtilsBean) BEANS_BY_CLASSLOADER.get());
+		MyBeanUtilsBean beanUtilsBean = new MyBeanUtilsBean();
+		beanUtilsBean.includes = includes == null ? null : Arrays.asList(includes);
 		ConvertUtilsBean cub = beanUtilsBean.getConvertUtils();
 		cub.register(new DateConverter(null), java.util.Date.class);
 		cub.register(new SqlTimestampConverter(null), java.sql.Timestamp.class);
@@ -109,9 +103,10 @@ class MyBeanUtilsBean extends org.apache.commons.beanutils.BeanUtilsBean {
 		return beanUtilsBean;
 	}
 
+	@Override
 	public void copyProperty(Object bean, String name, Object value)
 			throws IllegalAccessException, InvocationTargetException {
-		if (!StringUtils.isEmpty(includes) && !includes.contains(name.toLowerCase())) {
+		if (includes != null && !includes.isEmpty() && !includes.contains(name.toLowerCase())) {
 			return;
 		}
 		super.copyProperty(bean, name, value);

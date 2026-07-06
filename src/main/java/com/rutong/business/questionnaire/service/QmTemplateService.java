@@ -4,18 +4,26 @@ import com.alibaba.excel.EasyExcel;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.rutong.business.common.entity.BaseEntity;
-import com.rutong.business.common.service.BaseService;
 import com.rutong.business.questionnaire.constant.QuestionConstants;
 import com.rutong.business.questionnaire.entity.QmChapter;
 import com.rutong.business.questionnaire.entity.QmPersonalQuestion;
 import com.rutong.business.questionnaire.entity.QmQuestion;
 import com.rutong.business.questionnaire.entity.QmQuestionOption;
+import com.rutong.business.questionnaire.entity.QmQuestionLogic;
 import com.rutong.business.questionnaire.entity.QmTemplate;
 import com.rutong.business.questionnaire.entity.QmTemplateLibrary;
+import com.rutong.business.questionnaire.mapper.QmChapterMapper;
+import com.rutong.business.questionnaire.mapper.QmPersonalQuestionMapper;
+import com.rutong.business.questionnaire.mapper.QmQuestionLogicMapper;
+import com.rutong.business.questionnaire.mapper.QmQuestionMapper;
+import com.rutong.business.questionnaire.mapper.QmQuestionOptionMapper;
+import com.rutong.business.questionnaire.mapper.QmTemplateLibraryMapper;
 import com.rutong.business.questionnaire.pojo.QuestionImportRow;
 import com.rutong.business.questionnaire.pojo.QuestionVo;
 import com.rutong.framework.exception.ServiceException;
+import com.rutong.framework.service.MpBaseService;
 import com.rutong.framework.utils.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -26,16 +34,19 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 问卷模板 业务层
  */
 @Service
-public class QmTemplateService extends BaseService<QmTemplate> {
+public class QmTemplateService extends MpBaseService<QmTemplate> {
 
     @Autowired
     private QmChapterService chapterService;
@@ -43,11 +54,36 @@ public class QmTemplateService extends BaseService<QmTemplate> {
     private QmQuestionService questionService;
     @Autowired
     private QmQuestionOptionService optionService;
+    @Autowired
+    private QmQuestionMapper questionMapper;
+    @Autowired
+    private QmQuestionOptionMapper questionOptionMapper;
+    @Autowired
+    private QmQuestionLogicMapper questionLogicMapper;
+    @Autowired
+    private QmChapterMapper chapterMapper;
+    @Autowired
+    private QmTemplateLibraryMapper templateLibraryMapper;
+    @Autowired
+    private QmPersonalQuestionMapper personalQuestionMapper;
+
+    /**
+     * 覆盖父类：已发布(PUBLISHED)的模板不可修改，如需调整请新建或归档后重做。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int update(QmTemplate data) {
+        QmTemplate exist = findById(data.getId());
+        if (exist != null && QuestionConstants.STATUS_PUBLISHED.equals(exist.getStatus())) {
+            throw new ServiceException("已发布的模板不可修改");
+        }
+        return super.update(data);
+    }
 
     /**
      * 空白创建
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public QmTemplate createBlank(QmTemplate data) {
         data.setSourceType(QuestionConstants.SOURCE_BLANK);
         data.setStatus(QuestionConstants.STATUS_DRAFT);
@@ -58,9 +94,9 @@ public class QmTemplateService extends BaseService<QmTemplate> {
     /**
      * 模板创建：从行业模板库深拷贝
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public QmTemplate createFromLibrary(Long libId) {
-        QmTemplateLibrary lib = dao.findById(QmTemplateLibrary.class, libId);
+        QmTemplateLibrary lib = templateLibraryMapper.selectById(libId);
         if (lib == null) {
             throw new ServiceException("行业模板不存在");
         }
@@ -79,7 +115,7 @@ public class QmTemplateService extends BaseService<QmTemplate> {
     /**
      * 复制创建：复制已有问卷为基底
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public QmTemplate copyFrom(Long srcId) {
         QmTemplate src = findById(srcId);
         if (src == null) {
@@ -139,7 +175,7 @@ public class QmTemplateService extends BaseService<QmTemplate> {
     /**
      * 导入创建：从 Excel 导入题目
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public QmTemplate importFromExcel(String templateName, String category, MultipartFile file) {
         if (StringUtils.isEmpty(templateName)) {
             throw new ServiceException("模板名称不能为空");
@@ -197,7 +233,7 @@ public class QmTemplateService extends BaseService<QmTemplate> {
     /**
      * 发布：校验题目非空后置为 PUBLISHED
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int publish(Long id) {
         QmTemplate t = findById(id);
         if (t == null) {
@@ -213,7 +249,7 @@ public class QmTemplateService extends BaseService<QmTemplate> {
     /**
      * 归档
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int archive(Long id) {
         QmTemplate t = findById(id);
         if (t == null) {
@@ -236,29 +272,66 @@ public class QmTemplateService extends BaseService<QmTemplate> {
     }
 
     /**
-     * 删除：级联删除题目、章节，再删模板
+     * 删除：级联删除题目选项、题目逻辑、题目、章节，再删模板。
+     * MyBatis-Plus 不走数据库外键级联，必须显式清理，否则 option/logic 成为孤儿数据。
      */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int deleteById(Serializable id) {
-        dao.deleteByProperty(QmQuestion.class, "templateId", id);
-        dao.deleteByProperty(QmChapter.class, "templateId", id);
+        cascadeDeleteByTemplateIds(Collections.singleton((Long) id));
         return super.deleteById(id);
+    }
+
+    /**
+     * 批量删除：同样需级联清理子表（父类默认实现只删模板主表）。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteByIds(Long[] ids) {
+        if (ids == null || ids.length == 0) {
+            return 0;
+        }
+        cascadeDeleteByTemplateIds(Arrays.asList(ids));
+        return super.deleteByIds(ids);
+    }
+
+    /**
+     * 按 templateId 集合级联清理：option/logic（按 questionId）→ question → chapter。
+     */
+    private void cascadeDeleteByTemplateIds(Collection<Long> templateIds) {
+        if (templateIds == null || templateIds.isEmpty()) {
+            return;
+        }
+        List<Long> questionIds = questionMapper.selectList(new LambdaQueryWrapper<QmQuestion>()
+                        .select(QmQuestion::getId)
+                        .in(QmQuestion::getTemplateId, templateIds))
+                .stream().map(QmQuestion::getId).collect(Collectors.toList());
+        if (!questionIds.isEmpty()) {
+            questionOptionMapper.delete(new LambdaQueryWrapper<QmQuestionOption>()
+                    .in(QmQuestionOption::getQuestionId, questionIds));
+            questionLogicMapper.delete(new LambdaQueryWrapper<QmQuestionLogic>()
+                    .in(QmQuestionLogic::getQuestionId, questionIds));
+        }
+        questionMapper.delete(new LambdaQueryWrapper<QmQuestion>()
+                .in(QmQuestion::getTemplateId, templateIds));
+        chapterMapper.delete(new LambdaQueryWrapper<QmChapter>()
+                .in(QmChapter::getTemplateId, templateIds));
     }
 
     /**
      * 查询个人题库（收藏的题目）
      */
     public List<QmPersonalQuestion> listPersonalQuestion() {
-        return dao.findByProperty(QmPersonalQuestion.class, "userId",
-                com.rutong.framework.security.SecurityUtils.getUserId());
+        return personalQuestionMapper.selectList(new LambdaQueryWrapper<QmPersonalQuestion>()
+                .eq(QmPersonalQuestion::getUserId,
+                        com.rutong.framework.security.SecurityUtils.getUserId()));
     }
 
     /**
      * 行业模板库列表
      */
     public List<QmTemplateLibrary> listLibrary() {
-        return dao.findAll(QmTemplateLibrary.class);
+        return templateLibraryMapper.selectList(null);
     }
 
     // ===================== 私有辅助 =====================

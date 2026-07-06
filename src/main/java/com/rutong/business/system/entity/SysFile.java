@@ -1,13 +1,9 @@
 package com.rutong.business.system.entity;
 
 import com.rutong.business.common.entity.BaseEntity;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 
-@Entity
-@Table(name = "sys_file")
 public class SysFile extends BaseEntity {
 	  /**
      * 文件名称

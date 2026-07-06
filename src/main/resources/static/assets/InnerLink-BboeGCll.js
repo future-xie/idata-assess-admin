@@ -1,0 +1,1 @@
+import{S as e,T as t,a as n,j as r,s as i,x as a}from"./index-CIK0Eu_v.js";var o={class:`inner-link-container`},s=[`src`],c=i({__name:`InnerLink`,setup(i){let c=n(),l=a(()=>c.meta?.link||``);return(n,i)=>(r(),t(`div`,o,[e(`iframe`,{src:l.value,frameborder:`0`,class:`inner-link-iframe`},null,8,s)]))}},[[`__scopeId`,`data-v-ef886e0f`]]);export{c as default};

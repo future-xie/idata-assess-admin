@@ -1,9 +1,7 @@
 package com.rutong.business.questionnaire.entity;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.rutong.business.common.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,8 +10,7 @@ import lombok.Setter;
  */
 @Getter
 @Setter
-@Entity
-@Table(name = "qm_template")
+@TableName("qm_template")
 public class QmTemplate extends BaseEntity {
 
     /** 模板名称 */
@@ -29,10 +26,8 @@ public class QmTemplate extends BaseEntity {
     private String status;
 
     /** 外观样式配置（字体/颜色/Logo/CSS，JSON） */
-    @Column(columnDefinition = "text")
     private String styleConfig;
 
     /** 说明 */
-    @Column(length = 1024)
     private String description;
 }

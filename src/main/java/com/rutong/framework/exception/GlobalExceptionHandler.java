@@ -4,10 +4,10 @@ import com.rutong.framework.bean.AjaxResult;
 import com.rutong.framework.utils.StringUtils;
 import com.rutong.framework.utils.html.EscapeUtil;
 import com.rutong.framework.utils.text.ConvertStr;
-import jakarta.persistence.PersistenceException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BindException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -86,7 +86,8 @@ public class GlobalExceptionHandler {
     public AjaxResult handleRuntimeException(RuntimeException e, HttpServletRequest request) {
         String requestURI = request.getRequestURI();
         log.error("请求地址'{}',发生未知异常.", requestURI, e);
-        return AjaxResult.error(e.getMessage());
+        // 不向前端暴露内部异常信息（可能含 SQL/路径等），统一返回通用提示
+        return AjaxResult.error("系统异常，请稍后重试或联系管理员");
     }
 
     /**
@@ -96,7 +97,8 @@ public class GlobalExceptionHandler {
     public AjaxResult handleException(Exception e, HttpServletRequest request) {
         String requestURI = request.getRequestURI();
         log.error("请求地址'{}',发生系统异常.", requestURI, e);
-        return AjaxResult.error(e.getMessage());
+        // 不向前端暴露内部异常信息，统一返回通用提示
+        return AjaxResult.error("系统异常，请稍后重试或联系管理员");
     }
 
     /**
@@ -119,11 +121,12 @@ public class GlobalExceptionHandler {
         return AjaxResult.error(message);
     }
 
-    /** 捕获 Hibernate 外键异常 **/
-    @ExceptionHandler(PersistenceException.class)
-    public AjaxResult handleConstraintViolationException(PersistenceException ex) {
-        ex.printStackTrace();
-        return AjaxResult.error("暂时无法删除数据："+ ex.getMessage());
+    /** 捕获外键/约束违反异常（删除被引用数据时触发；MyBatis 经 spring-jdbc 翻译为 DataIntegrityViolationException） **/
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public AjaxResult handleDataIntegrityViolationException(DataIntegrityViolationException ex) {
+        log.error("数据完整性违反", ex);
+        // ex.getMostSpecificCause().getMessage() 可能含表名/SQL，不回传前端
+        return AjaxResult.error("该数据被其他记录引用，无法删除或修改");
     }
 
 }

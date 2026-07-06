@@ -1,1 +1,0 @@
-import{I as e,p as t}from"./runtime-core.esm-bundler-DOZneoXq.js";import{v as n}from"./index-CQL_wnGK.js";var r={};function i(n,r){return e(),t(`div`)}var a=n(r,[[`render`,i]]);export{a as default};

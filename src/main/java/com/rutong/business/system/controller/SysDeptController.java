@@ -4,7 +4,7 @@ import com.rutong.framework.bean.AjaxResult;
 import com.rutong.framework.bean.enums.BusinessType;
 import com.rutong.framework.annotation.OperLog;
 import com.rutong.framework.security.SecurityUtils;
-import com.rutong.business.common.service.BaseService;
+import com.rutong.framework.service.MpBaseService;
 import com.rutong.business.system.entity.SysDept;
 import com.rutong.business.system.query.SysDeptQuery;
 import com.rutong.business.system.service.SysDeptService;
@@ -42,9 +42,7 @@ public class SysDeptController {
     @PreAuthorize("@ss.hasPermi('system:dept:list')")
     @GetMapping("/treeselect")
     public AjaxResult treeselect() {
-        SysDeptQuery deptQuery = new SysDeptQuery();
-        deptQuery.setParentIdIsNull(true);
-        List<SysDept> depts = deptService.findAll(deptQuery, null);
+        List<SysDept> depts = deptService.findAll();
         return AjaxResult.success(deptService.buildDeptTreeSelect(depts));
     }
 
@@ -107,7 +105,7 @@ public class SysDeptController {
         return AjaxResult.success();
     }
 
-    public BaseService getService() {
+    public MpBaseService<SysDept> getService() {
         return deptService;
     }
 }

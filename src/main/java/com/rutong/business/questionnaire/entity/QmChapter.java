@@ -1,8 +1,7 @@
 package com.rutong.business.questionnaire.entity;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.rutong.business.common.entity.BaseEntity;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -11,8 +10,7 @@ import lombok.Setter;
  */
 @Getter
 @Setter
-@Entity
-@Table(name = "qm_chapter")
+@TableName("qm_chapter")
 public class QmChapter extends BaseEntity {
 
     /** 所属模板 ID */

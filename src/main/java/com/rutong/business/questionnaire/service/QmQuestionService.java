@@ -1,14 +1,15 @@
 package com.rutong.business.questionnaire.service;
 
 import com.alibaba.fastjson2.JSON;
-import com.rutong.business.common.service.BaseService;
 import com.rutong.business.questionnaire.constant.QuestionConstants;
 import com.rutong.business.questionnaire.entity.QmPersonalQuestion;
 import com.rutong.business.questionnaire.entity.QmQuestion;
 import com.rutong.business.questionnaire.entity.QmQuestionLogic;
 import com.rutong.business.questionnaire.entity.QmQuestionOption;
+import com.rutong.business.questionnaire.mapper.QmPersonalQuestionMapper;
 import com.rutong.business.questionnaire.pojo.QuestionVo;
 import com.rutong.framework.security.SecurityUtils;
+import com.rutong.framework.service.MpBaseService;
 import com.rutong.framework.utils.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -26,7 +27,7 @@ import java.util.stream.Collectors;
  * 题型配置以结构化字段 + qm_question_option 子表存储（不使用 JSON）。
  */
 @Service
-public class QmQuestionService extends BaseService<QmQuestion> {
+public class QmQuestionService extends MpBaseService<QmQuestion> {
 
     @Autowired
     private QmQuestionOptionService optionService;
@@ -34,11 +35,14 @@ public class QmQuestionService extends BaseService<QmQuestion> {
     @Autowired
     private QmQuestionLogicService logicService;
 
+    @Autowired
+    private QmPersonalQuestionMapper personalQuestionMapper;
+
     /**
      * 按模板查询全部题目（按 orderNum 升序），不含选项。
      */
     public List<QmQuestion> listByTemplate(Long templateId) {
-        List<QmQuestion> list = dao.findByProperty(QmQuestion.class, "templateId", templateId);
+        List<QmQuestion> list = lambdaQuery().eq(QmQuestion::getTemplateId, templateId).list();
         list.sort(Comparator.comparing(q -> q.getOrderNum() == null ? Integer.MAX_VALUE : q.getOrderNum()));
         return list;
     }
@@ -54,7 +58,7 @@ public class QmQuestionService extends BaseService<QmQuestion> {
      * 按章节查询题目（含选项 + 逻辑，批量加载）
      */
     public List<QuestionVo> listVoByChapter(Long chapterId) {
-        List<QmQuestion> list = dao.findByProperty(QmQuestion.class, "chapterId", chapterId);
+        List<QmQuestion> list = lambdaQuery().eq(QmQuestion::getChapterId, chapterId).list();
         list.sort(Comparator.comparing(q -> q.getOrderNum() == null ? Integer.MAX_VALUE : q.getOrderNum()));
         return buildVoList(list);
     }
@@ -88,7 +92,7 @@ public class QmQuestionService extends BaseService<QmQuestion> {
     /**
      * 新增题目（含选项）
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public QuestionVo saveQuestion(QuestionVo vo) {
         QmQuestion q = toEntity(vo);
         q.setId(null);
@@ -101,7 +105,7 @@ public class QmQuestionService extends BaseService<QmQuestion> {
     /**
      * 修改题目（含选项）
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public QuestionVo updateQuestionVo(QuestionVo vo) {
         QmQuestion q = toEntity(vo);
         update(q);
@@ -114,7 +118,7 @@ public class QmQuestionService extends BaseService<QmQuestion> {
      * 拖拽排序 / 跨章节移动：批量更新 chapterId 与 orderNum（不动选项）。
      * 入参为全量顺序快照 [{id, chapterId, orderNum}]，由前端按显示顺序计算后提交。
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int reorder(List<QmQuestion> items) {
         if (items == null || items.isEmpty()) {
             return 0;
@@ -123,13 +127,12 @@ public class QmQuestionService extends BaseService<QmQuestion> {
             if (patch == null || patch.getId() == null) {
                 continue;
             }
-            // 入参可能是 QuestionVo（未映射子类）实例，构造真实 QmQuestion 再更新，
-            // 避免 Hibernate "Unable to locate persister: QuestionVo"
-            QmQuestion p = new QmQuestion();
-            p.setId(patch.getId());
-            p.setChapterId(patch.getChapterId());
-            p.setOrderNum(patch.getOrderNum());
-            dao.update(p, "chapterId", "orderNum");
+            // 仅更新 chapterId / orderNum 两列（等价旧 dao.update(p, "chapterId", "orderNum")）
+            lambdaUpdate()
+                    .set(QmQuestion::getChapterId, patch.getChapterId())
+                    .set(QmQuestion::getOrderNum, patch.getOrderNum())
+                    .eq(QmQuestion::getId, patch.getId())
+                    .update();
         }
         return items.size();
     }
@@ -137,7 +140,7 @@ public class QmQuestionService extends BaseService<QmQuestion> {
     /**
      * 复制题目（含选项）到同模板末尾
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public QuestionVo copy(Long id) {
         QmQuestion source = findById(id);
         if (source == null) {
@@ -189,7 +192,7 @@ public class QmQuestionService extends BaseService<QmQuestion> {
     /**
      * 收藏题目到个人题库（题目 + 选项 生成 JSON 快照）
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int collectToPersonal(Long id) {
         QuestionVo vo = getVo(id);
         if (vo == null || vo.getId() == null) {
@@ -198,7 +201,7 @@ public class QmQuestionService extends BaseService<QmQuestion> {
         QmPersonalQuestion pq = new QmPersonalQuestion();
         pq.setUserId(SecurityUtils.getUserId());
         pq.setQuestionSnapshot(JSON.toJSONString(vo));
-        dao.save(pq);
+        personalQuestionMapper.insert(pq);
         return 1;
     }
 
@@ -206,7 +209,7 @@ public class QmQuestionService extends BaseService<QmQuestion> {
      * 删除题目：级联删除其选项
      */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int deleteById(Serializable id) {
         optionService.deleteByQuestion((Long) id);
         logicService.deleteByQuestion((Long) id);
@@ -260,13 +263,13 @@ public class QmQuestionService extends BaseService<QmQuestion> {
     }
 
     private Integer nextOrderNum(Long templateId) {
-        List<QmQuestion> list = dao.findByProperty(QmQuestion.class, "templateId", templateId);
-        int max = 0;
-        for (QmQuestion q : list) {
-            if (q.getOrderNum() != null && q.getOrderNum() > max) {
-                max = q.getOrderNum();
-            }
-        }
+        // 只取 orderNum 最大的一行，避免拉全表到内存求 max
+        QmQuestion top = lambdaQuery().eq(QmQuestion::getTemplateId, templateId)
+                .select(QmQuestion::getOrderNum)
+                .orderByDesc(QmQuestion::getOrderNum)
+                .last("limit 1")
+                .one();
+        int max = (top == null || top.getOrderNum() == null) ? 0 : top.getOrderNum();
         return max + 1;
     }
 }

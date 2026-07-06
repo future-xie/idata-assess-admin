@@ -1,6 +1,6 @@
 package com.rutong.configuration;
 
-import com.rutong.framework.constant.Constants;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -13,6 +13,8 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.util.Arrays;
 
 @Configuration
 public class WebConfiguration implements WebMvcConfigurer {
@@ -37,13 +39,13 @@ public class WebConfiguration implements WebMvcConfigurer {
 
 
     /**
-     * 跨域配置
+     * 跨域配置：来源收紧为白名单（通过 cors.origins 配置，逗号分隔）。
+     * 配合 SecurityConfig 禁用 CSRF，避免任意站点跨域携带 token 发起请求。
      */
     @Bean
-    public CorsFilter corsFilter() {
+    public CorsFilter corsFilter(@Value("${cors.origins:http://localhost:3000,http://localhost:8080}") String origins) {
         CorsConfiguration config = new CorsConfiguration();
-        // 设置访问源地址
-        config.addAllowedOrigin("*");
+        config.setAllowedOrigins(Arrays.asList(origins.split("\\s*,\\s*")));
         // 设置访问源请求头
         config.addAllowedHeader("*");
         // 设置访问源请求方法
@@ -53,7 +55,6 @@ public class WebConfiguration implements WebMvcConfigurer {
         // 添加映射路径，拦截一切请求
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
-        // 返回新的CorsFilter
         return new CorsFilter(source);
     }
 

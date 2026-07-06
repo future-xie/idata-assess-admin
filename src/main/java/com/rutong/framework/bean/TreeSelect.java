@@ -5,6 +5,7 @@ import com.rutong.business.system.entity.SysDept;
 import com.rutong.business.system.entity.SysMenu;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -14,73 +15,39 @@ import java.util.stream.Collectors;
 public class TreeSelect implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    /**
-     * 节点ID
-     */
+    /** 节点ID */
     private Long id;
-
-    /**
-     * 节点名称
-     */
+    /** 节点名称 */
     private String label;
-
-    /**
-     * 节点禁用
-     */
+    /** 节点禁用 */
     private boolean disabled = false;
-
-    /**
-     * 子节点
-     */
+    /** 子节点 */
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    private List<TreeSelect> children;
+    private List<TreeSelect> children = new ArrayList<>();
 
     public TreeSelect() {
-
     }
 
+    /** SysDept 不再带 children 关联，children 由 SysDeptService 按 parentId 手动嵌套填充 */
     public TreeSelect(SysDept dept) {
         this.id = dept.getId();
         this.label = dept.getDeptName();
         this.disabled = false;
-        this.children = dept.getChildren().stream().map(TreeSelect::new).collect(Collectors.toList());
     }
 
+    /** SysMenu 的 children 由 selectMenuByUserId→buildMenuTree 预填，可递归 */
     public TreeSelect(SysMenu menu) {
         this.id = menu.getId();
         this.label = menu.getMenuName();
         this.children = menu.getChildren().stream().map(TreeSelect::new).collect(Collectors.toList());
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getLabel() {
-        return label;
-    }
-
-    public void setLabel(String label) {
-        this.label = label;
-    }
-
-    public boolean isDisabled() {
-        return disabled;
-    }
-
-    public void setDisabled(boolean disabled) {
-        this.disabled = disabled;
-    }
-
-    public List<TreeSelect> getChildren() {
-        return children;
-    }
-
-    public void setChildren(List<TreeSelect> children) {
-        this.children = children;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getLabel() { return label; }
+    public void setLabel(String label) { this.label = label; }
+    public boolean isDisabled() { return disabled; }
+    public void setDisabled(boolean disabled) { this.disabled = disabled; }
+    public List<TreeSelect> getChildren() { return children; }
+    public void setChildren(List<TreeSelect> children) { this.children = children; }
 }

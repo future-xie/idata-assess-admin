@@ -1,0 +1,1 @@
+import{C as e,D as t,G as n,L as r,N as i,j as a}from"./index-CIK0Eu_v.js";var o=n({default:()=>s}),s={__name:`BooleanConfig`,props:{model:{type:Object,required:!0}},setup(n){return(n,o)=>{let s=i(`el-alert`),c=i(`el-form-item`);return a(),e(c,{label:`作答方式`},{default:r(()=>[t(s,{type:`info`,closable:!1,title:`受访者将以「是 / 否」切换作答`})]),_:1})}}};export{s as n,o as t};
